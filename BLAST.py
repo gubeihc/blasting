@@ -8,6 +8,10 @@ from ddddocr import DdddOcr
 import base64
 from pathlib import Path
 from PyQt6 import QtCore, QtWidgets
+import qdarktheme
+from docx import Document
+from docx.shared import Cm
+from os import remove
 
 
 class MLineEdit(QtWidgets.QLineEdit):
@@ -34,12 +38,20 @@ class Ui_window(object):
         self.url = ''
         self.urls = set()
         self.head = True
+        self.jietu = False
         self.yzm_list = []
         self.ocr = DdddOcr(show_ad=False)
         self.POSTdata = {
             'username': '',
             'password': ''
         }
+        self.document = Document()
+        self.document.add_heading("爆破程序执行截图", level=1)
+
+    def save_jietu(self, target, name, password, tp):
+        self.document.add_heading(f'目标地址:{target}', level=2)
+        self.document.add_paragraph(f"用户名：{name} 密码：{password}")
+        self.document.add_picture(f'{tp}', width=Cm(14), height=Cm(10))
 
     async def on_response(self, response):
         if response.request.method == 'POST':
@@ -54,14 +66,18 @@ class Ui_window(object):
                         self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
                         self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
             except  Exception as e:
-                if self.zd_yzm_text.text() in await response.text() or self.sd_yzm_text.text() in await response.text():
-                    print(self.zd_yzm_text.text(), "html 内容")
-                    if self.yzm_list.count(
-                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                        self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                        self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                try:
+                    if self.zd_yzm_text.text() in await response.text() or self.sd_yzm_text.text() in await response.text():
+                        print(self.zd_yzm_text.text(), "html 内容")
+                        if self.yzm_list.count(
+                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                            self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                            self.yzm_list.append(
+                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                            self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                            self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                except Exception as e:
+                    pass
 
     # 浏览器执行js代码区域
     async def performJs_yzm_code(self, page_two, passwd, user, code):
@@ -188,7 +204,7 @@ class Ui_window(object):
 
                 var name = x('%s');
                 var password = x('%s');
-                name.value =  '%s';       
+                name.value =  '%s';
                 password.value= '%s';
                 var but = x('%s');
                 but.click();
@@ -207,8 +223,8 @@ class Ui_window(object):
                     var password = x('%s');
                     var yzm = x('%s');
                     name.value= '%s'
-                    password.value =  '%s'       
-                    yzm.value =  '%s'       
+                    password.value =  '%s'
+                    yzm.value =  '%s'
                     var but = x('%s')
                     but.click()
                                                                                     }''' % (
@@ -221,6 +237,11 @@ class Ui_window(object):
             self.result_text.append(str(' {}'.format(result)))
             self.urls.discard(setlist)
             self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+            if self.jietu:
+                name = user + passwd + '.png'
+                await  page_two.screenshot(path=f'{name}', )
+                self.save_jietu(setlist[0], user, passwd, name)
+                remove(name)
             timeouts = int(self.zd_delay_text.text()) * 1000
             await page_two.wait_for_timeout(timeouts)
             await page_two.close()
@@ -232,6 +253,11 @@ class Ui_window(object):
                 self.result_text.append(str('{}'.format(result)))
                 self.urls.discard(setlist)
                 self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+                if self.jietu:
+                    name = user + passwd + '.png'
+                    await  page_two.screenshot(path=f'{name}', )
+                    self.save_jietu(setlist[0], user, passwd, name)
+                    remove(name)
                 timeouts = int(self.zd_delay_text.text()) * 1000
                 await page_two.wait_for_timeout(timeouts)
                 await page_two.close()
@@ -247,7 +273,7 @@ class Ui_window(object):
         passwd = setlist[2]
         async with sem:
             page_two = await context.new_page()
-            page_two.set_default_timeout(3000)
+            page_two.set_default_timeout(3000 * int(self.zd_delay_text.text()))
             try:
                 page_two.on('response', self.on_response)
                 await  page_two.goto(url)
@@ -292,7 +318,7 @@ class Ui_window(object):
 
         async with sem:
             page_two = await context.new_page()
-            page_two.set_default_timeout(3000)
+            page_two.set_default_timeout(3000 * int(self.sd_delay_text.text()))
             try:
                 page_two.on('response', self.on_response)
                 await  page_two.goto(url)
@@ -349,6 +375,9 @@ class Ui_window(object):
                 except  Exception as e:
                     print(e)
             self.zd_start_log.append("爆破程序执行完毕")
+            if self.jietu:
+                self.document.save("弱口令报告.docx")
+                self.zd_start_log.append("生成弱口令报告.docx到当前文件夹")
 
     async def main_sd(self):
         async with async_playwright() as asp:
@@ -380,28 +409,29 @@ class Ui_window(object):
     def blastingMode(self, mode: str):
         url = self.target_url.text()
         user = self.password_result_text_user.toPlainText().split('\n')
-        passwpord = self.password_result_text_pass.toPlainText().split('\n')
-        if len(user[0]) == 0 or len(passwpord[0]) == 0:
-            self.zd_start_log.append('你还没有输入用户名或密码哦')
-            self.sd_start_log.append('你还没有输入用户名或密码哦')
-            return
-        elif len(user) == 1 and len(passwpord) == 1:
-            self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-            self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-            return
+        password = self.password_result_text_pass.toPlainText().split('\n')
         if url.endswith(".txt"):
             data = self.readfile_scan(url)
             for urls in data:
                 if mode == 'sniper:狙击手':
-                    if len(user) == 1 and len(passwpord) >= 2:
-                        '''这里用户名 1位 密码 大于1 '''
-                        for passwo in passwpord:
+                    if len(user) == 1 and len(password) >= 2:
+                        for passwo in password:
                             self.urls.add((urls, user[0], passwo))
-                    elif len(passwpord) == 1 and len(user) >= 2:
-                        '''这里用户名 大于1位 密码 ==1 '''
+                    elif len(password) == 1 and len(user) >= 2:
                         for ur in user:
-                            self.urls.add((urls, ur, passwpord[0]))
-                    elif len(passwpord) >= 2 and len(user) >= 2:
+                            self.urls.add((urls, ur, password[0]))
+                    elif len(password) >= 2 and len(user) >= 2:
+                        self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                        self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                elif mode == "jietu:截图":
+                    self.jietu = True
+                    if len(user) == 1 and len(password) >= 2:
+                        for passwo in password:
+                            self.urls.add((urls, user[0], passwo))
+                    elif len(password) == 1 and len(user) >= 2:
+                        for ur in user:
+                            self.urls.add((urls, ur, password[0]))
+                    elif len(password) >= 2 and len(user) >= 2:
                         self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                         self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                 else:
@@ -409,17 +439,61 @@ class Ui_window(object):
                     self.sd_start_log.append("暂时没有其他模式")
         else:
             if mode == 'sniper:狙击手':
-                if len(user) == 1 and len(passwpord) >= 2:
+                if len(user) == 1 and len(password) >= 2:
                     '''这里用户名 1位 密码 大于1 '''
-                    for passwo in passwpord:
+                    for passwo in password:
                         self.urls.add((url, user[0], passwo))
-                elif len(passwpord) == 1 and len(user) >= 2:
+                elif len(password) == 1 and len(user) >= 2:
                     '''这里用户名 大于1位 密码 ==1 '''
                     for ur in user:
-                        self.urls.add((url, ur, passwpord[0]))
-                elif len(passwpord) >= 2 and len(user) >= 2:
+                        self.urls.add((url, ur, password[0]))
+                elif len(password) >= 2 and len(user) >= 2:
                     self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                     self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+            elif mode == "ram:攻城锤":
+                print(len(user), len(password))
+                if len(user) == 1 and len(password) == 1:
+                    self.zd_start_log.append('你还没有输入用户名或密码哦')
+                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    return
+                else:
+                    payload = set(user + password)
+                    for pay in payload:
+                        self.urls.add((url, pay, pay))
+            elif mode == "fork:草叉模式":
+                if len(user) <= 1 and len(password) <= 1:
+                    self.zd_start_log.append('你还没有输入用户名或密码哦')
+                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    return
+                else:
+                    for name, pay in zip(user, password):
+                        self.urls.add((url, name, pay))
+            elif mode == "bomb:集束炸弹":
+                if len(user) <= 1 and len(password) <= 1:
+                    self.zd_start_log.append('你还没有输入用户名或密码哦')
+                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    return
+                elif len(user) <= 1 or len(password) <= 1:
+                    self.zd_start_log.append('你还没有输入用户名或密码哦')
+                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                else:
+                    for name in user:
+                        for pay in password:
+                            self.urls.add((url, name, pay))
+            elif mode == "jietu:截图":
+                self.jietu = True
+                if len(user) == 1 and len(password) >= 2:
+                    '''这里用户名 1位 密码 大于1 '''
+                    for passwo in password:
+                        self.urls.add((url, user[0], passwo))
+                elif len(password) == 1 and len(user) >= 2:
+                    '''这里用户名 大于1位 密码 ==1 '''
+                    for ur in user:
+                        self.urls.add((url, ur, password[0]))
+                elif len(password) >= 2 and len(user) >= 2:
+                    self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                    self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+
             else:
                 self.zd_start_log.append("暂时没有其他模式")
                 self.sd_start_log.append("暂时没有其他模式")
@@ -548,12 +622,7 @@ class Ui_window(object):
     def setupUi(self, window):
         window.setObjectName("window")
         window.setFixedSize(1234, 886)
-        window.setStyleSheet("border: 1px solid rgb(41, 57, 85);"
-                             "border-radius: 3px;"
-                             "background: white;"
-                             "selection-background-color: green;"
-                             "font-size: 14px ;"
-                             "")
+
         self.target_url = MLineEdit("", window)
         self.target_url.setGeometry(QtCore.QRect(10, 5, 561, 31))
         self.target_url.setAcceptDrops(True)
@@ -568,6 +637,10 @@ class Ui_window(object):
         self.zd_mode_list = QtWidgets.QComboBox(self.BLASt_zd)
         self.zd_mode_list.setGeometry(QtCore.QRect(120, 20, 140, 20))
         self.zd_mode_list.setObjectName("zd_mode_list")
+        self.zd_mode_list.addItem("")
+        self.zd_mode_list.addItem("")
+        self.zd_mode_list.addItem("")
+        self.zd_mode_list.addItem("")
         self.zd_mode_list.addItem("")
         self.zd_lable_mode = QtWidgets.QLabel(self.BLASt_zd)
         self.zd_lable_mode.setGeometry(QtCore.QRect(10, 20, 90, 20))
@@ -796,9 +869,13 @@ class Ui_window(object):
 
     def retranslateUi(self, window):
         _translate = QtCore.QCoreApplication.translate
-        window.setWindowTitle(_translate("window", "BLAST v1 测试版本"))
+        window.setWindowTitle(_translate("window", "BLAST v1.2 测试版本"))
         self.target_url.setText(_translate("window", "http://127.0.0.1/login.php"))
         self.zd_mode_list.setItemText(0, _translate("window", "sniper:狙击手"))
+        self.zd_mode_list.setItemText(1, _translate("window", "ram:攻城锤"))
+        self.zd_mode_list.setItemText(2, _translate("window", "fork:草叉模式"))
+        self.zd_mode_list.setItemText(3, _translate("window", "bomb:集束炸弹"))
+        self.zd_mode_list.setItemText(4, _translate("window", "jietu:截图"))
         self.zd_lable_mode.setText(_translate("window", "爆破模式"))
         self.zd_browser_label.setText(_translate("window", "浏览器"))
         self.zd_delay_lable.setText(_translate("window", "延迟关闭"))
@@ -836,6 +913,8 @@ class Ui_window(object):
         self.tabWidget_mode.setTabText(self.tabWidget_mode.indexOf(self.BLAST_sd), _translate("window", "手动选择"))
         self.start_button.setText(_translate("window", "开始爆破"))
         self.export_button.setText(_translate("window", "导出数据"))
+        self.suspended_button.setText(_translate("window", "暂停爆破"))
+        self.restart_button.setText(_translate("window", "重启爆破"))
         self.Load_file_button_user.setText(_translate("window", "Load"))
         self.Clear_list_button_user.setText(_translate("window", "Clear"))
         self.password_result_text_user.setText("admin")
@@ -850,14 +929,14 @@ class Ui_window(object):
         self.password_result_text_pass.setText("123456")
         self.tabWidget_user_passwd.setTabText(self.tabWidget_user_passwd.indexOf(self.tab_pass),
                                               _translate("window", "密码"))
-        self.suspended_button.setText(_translate("window", "暂停爆破"))
-        self.restart_button.setText(_translate("window", "重启爆破"))
+
         self.announcement.setText(
             "本工具仅能在取得足够合法授权的企业安全建设中使用，在使用本工具过程中，您应确保自己所有行为符合当地的法律法规。 如您在使用本工具的过程中存在任何非法行为，您将自行承担所有后果，本工具所有开发者和所有贡献者不承担任何法律及连带责任。 除非您已充分阅读、完全理解并接受本协议所有条款，否则，请您不要安装并使用本工具。 您的使用行为或者您以其他任何明示或者默示方式表示接受本协议的，即视为您已阅读并同意本协议的约束。")
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyleSheet(qdarktheme.load_stylesheet())
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
     mainwindows = QMainWindow()
