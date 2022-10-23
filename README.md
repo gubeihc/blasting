@@ -47,7 +47,7 @@ jietu:截图
 
 
 ## 演示视频
-链接: https://pan.baidu.com/s/16fpvlphM8ZcnARkQBrGUmg 提取码: n5ix 
+链接: https://pan.baidu.com/s/197RX5ND-CAKZ8SS7LIGggQ 提取码: eja3 
 --来自百度网盘超级会员v6的分享
 
 # 两种请求模式。 自动 和手动 ，自动模式针对标准后台登录网站 输入账户密码字典就可以爆破 
