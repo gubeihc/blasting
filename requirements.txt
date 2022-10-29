@@ -4,3 +4,4 @@ lxml==4.9.1
 playwright==1.27.1
 PyQt6==6.4.0
 qasync==0.23.0
+pyqtdarktheme==1.1.0
