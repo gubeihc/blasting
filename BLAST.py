@@ -1,6 +1,9 @@
+import platform
 import qasync
 import sys
 from PyQt6.QtWidgets import QMainWindow, QFileDialog, QApplication
+from PyQt6.QtGui import QGuiApplication
+
 import asyncio
 from playwright.async_api import async_playwright
 from lxml import etree
@@ -28,6 +31,8 @@ class MLineEdit(QtWidgets.QLineEdit):
     def dropEvent(self, e):
         filePathList = e.mimeData().text()
         filePath = filePathList.split('\n')[0]  # 拖拽多文件只取第一个地址
+        if platform.system() == "Windows":
+            filePath = filePath.replace('file:///', '')
         filePath = filePath.replace('file://', '', 1)  # 去除文件地址前缀的特定字符
         self.setText(filePath)
 
@@ -41,6 +46,7 @@ class Ui_window(object):
         self.jietu = False
         self.yzm_list = []
         self.ocr = DdddOcr(show_ad=False)
+        self.tasks = []
         self.POSTdata = {
             'username': '',
             'password': ''
@@ -122,7 +128,6 @@ class Ui_window(object):
                                                    }
 
 
-
                                                    return urls;
                                                                        }''' % (passwd, user, code))
 
@@ -158,7 +163,6 @@ class Ui_window(object):
                                            form[i].value = '%s'
                                            password=form[i].value
                                            form[i].dispatchEvent(new CustomEvent('input'))
-
                                            u = i - 1
                                            form[u].value = '%s'
                                            form[u].dispatchEvent(new CustomEvent('input'))
@@ -235,8 +239,6 @@ class Ui_window(object):
         if len(urls) != 0:
             result = f'title:{await page_two.title()} {page_two.url}  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}'
             self.result_text.append(str(' {}'.format(result)))
-            self.urls.discard(setlist)
-            self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
             if self.jietu:
                 name = user + passwd + '.png'
                 await  page_two.screenshot(path=f'{name}', )
@@ -245,14 +247,14 @@ class Ui_window(object):
             timeouts = int(self.zd_delay_text.text()) * 1000
             await page_two.wait_for_timeout(timeouts)
             await page_two.close()
+            self.urls.discard(setlist)
+            self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+
         else:
             try:
                 await page_two.click('//button[@type="submit"] | //button[@type="button"] |//button', timeout=3000)
-
                 result = f'title:{await page_two.title()} {page_two.url}  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}'
                 self.result_text.append(str('{}'.format(result)))
-                self.urls.discard(setlist)
-                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
                 if self.jietu:
                     name = user + passwd + '.png'
                     await  page_two.screenshot(path=f'{name}', )
@@ -261,10 +263,12 @@ class Ui_window(object):
                 timeouts = int(self.zd_delay_text.text()) * 1000
                 await page_two.wait_for_timeout(timeouts)
                 await page_two.close()
-            except  Exception as e:
                 self.urls.discard(setlist)
                 self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+            except  Exception as e:
                 await page_two.close()
+                self.urls.discard(setlist)
+                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
 
     async def get_url_request(self, context, sem, setlist):
         url = setlist[0]
@@ -359,6 +363,10 @@ class Ui_window(object):
                 await page_two.wait_for_timeout(timeouts)
                 await page_two.close()
 
+    async def alltasks(self):
+        all = asyncio.all_tasks()
+        self.zd_start_log.append(str(len(all)))
+
     async def main(self):
         async with async_playwright() as asp:
             PROXY_HTTP = f"http://{self.zd_proxy_text.text()}"
@@ -370,8 +378,11 @@ class Ui_window(object):
             sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
             while len(self.urls) > 0:
                 try:
-                    tasks = [asyncio.ensure_future(self.get_url_request(context, sem, url)) for url in self.urls.copy()]
-                    dones, pendings = await asyncio.wait(tasks)
+                    for url in self.urls.copy():
+                        task = asyncio.create_task(self.get_url_request(context, sem, url))
+                        task.set_name(url)
+                        self.tasks.append(task)
+                    dones, pendings = await asyncio.wait(self.tasks)
                 except  Exception as e:
                     print(e)
             self.zd_start_log.append("爆破程序执行完毕")
@@ -451,7 +462,6 @@ class Ui_window(object):
                     self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                     self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
             elif mode == "ram:攻城锤":
-                print(len(user), len(password))
                 if len(user) == 1 and len(password) == 1:
                     self.zd_start_log.append('你还没有输入用户名或密码哦')
                     self.sd_start_log.append('你还没有输入用户名或密码哦')
@@ -493,7 +503,6 @@ class Ui_window(object):
                 elif len(password) >= 2 and len(user) >= 2:
                     self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                     self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-
             else:
                 self.zd_start_log.append("暂时没有其他模式")
                 self.sd_start_log.append("暂时没有其他模式")
@@ -502,6 +511,16 @@ class Ui_window(object):
     def waitingFor(self):
         self.zd_start_log.append("等待更新")
         self.sd_start_log.append("等待更新")
+        self.log_clear()
+        taskss = asyncio.all_tasks()
+        for key in taskss:
+            if "Task" not in key.get_name():
+                self.urls.add(tuple(eval(key.get_name())))
+                key.cancel()
+            else:
+                key.cancel()
+        self.zd_start_log.append(f"暂停任务剩余{len(self.urls)}")
+        self.sd_start_log.append(f"暂停任务剩余{len(self.urls)}")
 
     # 导出result 日志
     def export_log(self):
@@ -567,10 +586,11 @@ class Ui_window(object):
             self.zd_browser_button.setText("False")
 
     def log_clear(self):
-        self.urls.clear()
         self.zd_start_log.clear()
         self.result_text.clear()
         self.sd_start_log.clear()
+        self.urls.clear()
+        self.tasks.clear()
 
     def get_start(self):
         self.log_clear()
@@ -592,11 +612,26 @@ class Ui_window(object):
             except  Exception as e:
                 self.sd_start_log.append(str(e))
 
+    def reget_start(self):
+        if self.tabWidget_mode.currentIndex() == 0:
+            try:
+                self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
+                asyncio.ensure_future(self.main(), loop=loop)
+            except  Exception as e:
+                self.zd_start_log.append(str(e))
+        elif self.tabWidget_mode.currentIndex() == 1:
+            self.sd_start_log.append("手动请求模式启动！")
+            try:
+                self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
+                asyncio.ensure_future(self.main_sd(), loop=loop)
+            except  Exception as e:
+                self.sd_start_log.append(str(e))
+
     def setui_text(self, window):
         self.setupUi(window)
 
         # 暂停，重启按钮
-        self.restart_button.clicked.connect(lambda: self.waitingFor())
+        self.restart_button.clicked.connect(lambda: self.reget_start())
         self.suspended_button.clicked.connect(lambda: self.waitingFor())
 
         # 导出按钮
@@ -622,11 +657,13 @@ class Ui_window(object):
     def setupUi(self, window):
         window.setObjectName("window")
         window.setFixedSize(1234, 886)
+        screen = QGuiApplication.primaryScreen().size()
+        size = window.geometry()
+        window.move((screen.width() - size.width()) / 2,
+                    (screen.height() - size.height()) / 2)
 
         self.target_url = MLineEdit("", window)
         self.target_url.setGeometry(QtCore.QRect(10, 5, 561, 31))
-        self.target_url.setAcceptDrops(True)
-        self.target_url.setFrame(False)
         self.target_url.setCursorPosition(26)
         self.target_url.setObjectName("target_url")
         self.tabWidget_mode = QtWidgets.QTabWidget(window)
@@ -637,11 +674,6 @@ class Ui_window(object):
         self.zd_mode_list = QtWidgets.QComboBox(self.BLASt_zd)
         self.zd_mode_list.setGeometry(QtCore.QRect(120, 20, 140, 20))
         self.zd_mode_list.setObjectName("zd_mode_list")
-        self.zd_mode_list.addItem("")
-        self.zd_mode_list.addItem("")
-        self.zd_mode_list.addItem("")
-        self.zd_mode_list.addItem("")
-        self.zd_mode_list.addItem("")
         self.zd_lable_mode = QtWidgets.QLabel(self.BLASt_zd)
         self.zd_lable_mode.setGeometry(QtCore.QRect(10, 20, 90, 20))
         self.zd_lable_mode.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -869,17 +901,17 @@ class Ui_window(object):
 
     def retranslateUi(self, window):
         _translate = QtCore.QCoreApplication.translate
-        window.setWindowTitle(_translate("window", "BLAST v1.2 测试版本"))
+        window.setWindowTitle(_translate("window", "BLAST v2.0 完善暂停重启"))
         self.target_url.setText(_translate("window", "http://127.0.0.1/login.php"))
-        self.zd_mode_list.setItemText(0, _translate("window", "sniper:狙击手"))
-        self.zd_mode_list.setItemText(1, _translate("window", "ram:攻城锤"))
-        self.zd_mode_list.setItemText(2, _translate("window", "fork:草叉模式"))
-        self.zd_mode_list.setItemText(3, _translate("window", "bomb:集束炸弹"))
-        self.zd_mode_list.setItemText(4, _translate("window", "jietu:截图"))
+        self.zd_mode_list.addItem(_translate("window", "sniper:狙击手"))
+        self.zd_mode_list.addItem(_translate("window", "ram:攻城锤"))
+        self.zd_mode_list.addItem(_translate("window", "fork:草叉模式"))
+        self.zd_mode_list.addItem(_translate("window", "bomb:集束炸弹"))
+        self.zd_mode_list.addItem(_translate("window", "jietu:截图"))
         self.zd_lable_mode.setText(_translate("window", "爆破模式"))
         self.zd_browser_label.setText(_translate("window", "浏览器"))
         self.zd_delay_lable.setText(_translate("window", "延迟关闭"))
-        self.zd_delay_text.setText(_translate("window", "2"))
+        self.zd_delay_text.setText(_translate("window", "1"))
         self.zd_start_run_loglabel.setText(_translate("window", "程序启动日志"))
         self.zd_browser_button.setText(_translate("window", "False"))
         self.zd_yzm_text.setText(_translate("window", "验证码不正确"))
