@@ -59,32 +59,6 @@ class Ui_window(object):
         self.document.add_paragraph(f"用户名：{name} 密码：{password}")
         self.document.add_picture(f'{tp}', width=Cm(14), height=Cm(10))
 
-    async def on_response(self, response):
-        if response.request.method == 'POST':
-            try:
-                html = await response.json()
-                if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
-                    print(self.zd_yzm_text.text(), "json ")
-                    if self.yzm_list.count(
-                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                        self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                        self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-            except  Exception as e:
-                try:
-                    if self.zd_yzm_text.text() in await response.text() or self.sd_yzm_text.text() in await response.text():
-                        print(self.zd_yzm_text.text(), "html 内容")
-                        if self.yzm_list.count(
-                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                            self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                            self.yzm_list.append(
-                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                            self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                            self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                except Exception as e:
-                    pass
-
     # 浏览器执行js代码区域
     async def performJs_yzm_code(self, page_two, passwd, user, code):
         return await page_two.evaluate('''()=>{
@@ -244,12 +218,25 @@ class Ui_window(object):
                 await  page_two.screenshot(path=f'{name}', )
                 self.save_jietu(setlist[0], user, passwd, name)
                 remove(name)
-            timeouts = int(self.zd_delay_text.text()) * 1000
-            await page_two.wait_for_timeout(timeouts)
-            await page_two.close()
-            self.urls.discard(setlist)
-            self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
 
+            if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
+                    await page_two.content()):
+                if self.yzm_list.count(
+                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                    self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                    self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                    self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                    self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                    timeouts = int(self.zd_delay_text.text()) * 1000
+                    await page_two.wait_for_timeout(timeouts)
+                    await page_two.close()
+            else:
+
+                timeouts = int(self.zd_delay_text.text()) * 1000
+                await page_two.wait_for_timeout(timeouts)
+                await page_two.close()
+                self.urls.discard(setlist)
+                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
         else:
             try:
                 await page_two.click('//button[@type="submit"] | //button[@type="button"] |//button', timeout=3000)
@@ -260,11 +247,25 @@ class Ui_window(object):
                     await  page_two.screenshot(path=f'{name}', )
                     self.save_jietu(setlist[0], user, passwd, name)
                     remove(name)
-                timeouts = int(self.zd_delay_text.text()) * 1000
-                await page_two.wait_for_timeout(timeouts)
-                await page_two.close()
-                self.urls.discard(setlist)
-                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+
+                if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
+                        await page_two.content()):
+                    if self.yzm_list.count(
+                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                        self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                        self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+                        self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                        self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                        timeouts = int(self.zd_delay_text.text()) * 1000
+                        await page_two.wait_for_timeout(timeouts)
+                        await page_two.close()
+
+                else:
+                    timeouts = int(self.zd_delay_text.text()) * 1000
+                    await page_two.wait_for_timeout(timeouts)
+                    await page_two.close()
+                    self.urls.discard(setlist)
+                    self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
             except  Exception as e:
                 await page_two.close()
                 self.urls.discard(setlist)
@@ -279,7 +280,6 @@ class Ui_window(object):
             page_two = await context.new_page()
             page_two.set_default_timeout(3000 * int(self.zd_delay_text.text()))
             try:
-                page_two.on('response', self.on_response)
                 await  page_two.goto(url)
                 await page_two.wait_for_load_state(state='networkidle')
                 html = etree.HTML(await  page_two.content())
@@ -372,9 +372,12 @@ class Ui_window(object):
             PROXY_HTTP = f"http://{self.zd_proxy_text.text()}"
             browserLaunchOptionDict = {
                 "headless": self.head,
+
             }
+            ## 配置user-agent
             browse = await  asp.chromium.launch(**browserLaunchOptionDict)
-            context = await browse.new_context(ignore_https_errors=True)
+            user_agent = "Mozilla/4.0 (compatible; MSIE 8.0; AOL 9.6; AOLBuild 4340.168; Windows NT 5.1; Trident/4.0; GTB7.1; .NET CLR 1.0.3705; .NET CLR 1.1.4322; .NET CLR 3.0.04506.30; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727)"
+            context = await browse.new_context(ignore_https_errors=True, user_agent=user_agent)
             sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
             while len(self.urls) > 0:
                 try:
@@ -445,6 +448,35 @@ class Ui_window(object):
                     elif len(password) >= 2 and len(user) >= 2:
                         self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                         self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                elif mode == "ram:攻城锤":
+                    if len(user) == 1 and len(password) == 1:
+                        self.zd_start_log.append('你还没有输入用户名或密码哦')
+                        self.sd_start_log.append('你还没有输入用户名或密码哦')
+                        return
+                    else:
+                        payload = set(user + password)
+                        for pay in payload:
+                            self.urls.add((url, pay, pay))
+                elif mode == "fork:草叉模式":
+                    if len(user) <= 1 and len(password) <= 1:
+                        self.zd_start_log.append('你还没有输入用户名或密码哦')
+                        self.sd_start_log.append('你还没有输入用户名或密码哦')
+                        return
+                    else:
+                        for name, pay in zip(user, password):
+                            self.urls.add((url, name, pay))
+                elif mode == "bomb:集束炸弹":
+                    if len(user) <= 1 and len(password) <= 1:
+                        self.zd_start_log.append('你还没有输入用户名或密码哦')
+                        self.sd_start_log.append('你还没有输入用户名或密码哦')
+                        return
+                    elif len(user) <= 1 or len(password) <= 1:
+                        self.zd_start_log.append('你还没有输入用户名或密码哦')
+                        self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    else:
+                        for name in user:
+                            for pay in password:
+                                self.urls.add((url, name, pay))
                 else:
                     self.zd_start_log.append("暂时没有其他模式")
                     self.sd_start_log.append("暂时没有其他模式")
@@ -503,14 +535,9 @@ class Ui_window(object):
                 elif len(password) >= 2 and len(user) >= 2:
                     self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
                     self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-            else:
-                self.zd_start_log.append("暂时没有其他模式")
-                self.sd_start_log.append("暂时没有其他模式")
 
     # 暂停，重启按钮
     def waitingFor(self):
-        self.zd_start_log.append("等待更新")
-        self.sd_start_log.append("等待更新")
         self.log_clear()
         taskss = asyncio.all_tasks()
         for key in taskss:
@@ -659,8 +686,8 @@ class Ui_window(object):
         window.setFixedSize(1234, 886)
         screen = QGuiApplication.primaryScreen().size()
         size = window.geometry()
-        window.move((screen.width() - size.width()) / 2,
-                    (screen.height() - size.height()) / 2)
+        window.move(int((screen.width() - size.width()) / 2),
+                    int((screen.height() - size.height()) / 2))
 
         self.target_url = MLineEdit("", window)
         self.target_url.setGeometry(QtCore.QRect(10, 5, 561, 31))
@@ -901,7 +928,7 @@ class Ui_window(object):
 
     def retranslateUi(self, window):
         _translate = QtCore.QCoreApplication.translate
-        window.setWindowTitle(_translate("window", "BLAST v2.0 完善暂停重启"))
+        window.setWindowTitle(_translate("window", "BLAST v2.1"))
         self.target_url.setText(_translate("window", "http://127.0.0.1/login.php"))
         self.zd_mode_list.addItem(_translate("window", "sniper:狙击手"))
         self.zd_mode_list.addItem(_translate("window", "ram:攻城锤"))
@@ -914,7 +941,7 @@ class Ui_window(object):
         self.zd_delay_text.setText(_translate("window", "1"))
         self.zd_start_run_loglabel.setText(_translate("window", "程序启动日志"))
         self.zd_browser_button.setText(_translate("window", "False"))
-        self.zd_yzm_text.setText(_translate("window", "验证码不正确"))
+        self.zd_yzm_text.setText(_translate("window", "验证码错误"))
         self.zd_yzm_lable.setText(_translate("window", "验证码错误关键词"))
         self.zd_proxy_label.setText(_translate("window", "网页代理"))
         self.zd_sem_label.setText(_translate("window", "线程设置"))
