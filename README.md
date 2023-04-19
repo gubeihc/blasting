@@ -43,12 +43,13 @@ jietu:截图
 
 
 
-
-
+### 源码使用需要安装浏览器
+python3 -m playwright install
 
 ## 演示视频
-链接: https://pan.baidu.com/s/197RX5ND-CAKZ8SS7LIGggQ 提取码: eja3 
---来自百度网盘超级会员v6的分享
+链接: 链接: https://pan.baidu.com/s/1MVjXVZFB_mPND0SYZRCnIw 提取码: ch3n 
+
+
 
 # 两种请求模式。 自动 和手动 ，自动模式针对标准后台登录网站 输入账户密码字典就可以爆破 
 
