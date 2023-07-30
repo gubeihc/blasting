@@ -38,15 +38,12 @@ jietu:截图
 ## 程序优点
 
 优点1：针对网站后台用户名密码加密无需分析js即可爆破请求。
-
 优点2：采用通用特征方式识别用户名和密码进行提交请求。
-
 优点3：通过内置大佬ddddocr库可以进行存在验证码后台爆破。
-
 优点4：通过监听请求数据可以做到验证码错误重试功能。
-
-
 优点5：可以对大量不同登录系统进行批量爆破测试并截图。
+优点6：新添加cdp模式，可以使用工具直接爆破也可以配合burp的autodecoder插件做到burp调试明文实际发包密文传输。
+
 
 
 
@@ -58,10 +55,17 @@ python3 -m playwright install
 
 
 
-# 两种请求模式。 自动 和手动 ，自动模式针对标准后台登录网站 输入账户密码字典就可以爆破
+# 三种请求模式。 自动、手动、cdp爆破，
+
+## 自动模式针对标准后台登录网站 输入账户密码字典就可以爆破
 
 ![image](https://github.com/gubeihc/blasting/blob/main/image/zd.png)
 
 
-# 手动模式的话就需要填入 用户 密码 登录按钮 如果有验证码就填入验证码的xpath 路径  
+## 手动模式的话就需要填入 用户 密码 登录按钮 如果有验证码就填入验证码的xpath 路径  
 ![image](https://github.com/gubeihc/blasting/blob/main/image/sd.png)
+
+## cdp模式需要配合burp使用，采用aiohttp来进行发包，cdp协议来远程调用加密函数
+
+![image](https://github.com/gubeihc/blasting/blob/main/image/cdp.png)
+
