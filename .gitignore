@@ -1,0 +1,8 @@
+
+.DS_Store
+PyUi/__init__.py
+PyUi/__pycache__/__init__.cpython-39.pyc
+PyUi/__pycache__/Uilist.cpython-39.pyc
+utlis/__pycache__/__init__.cpython-39.pyc
+utlis/__pycache__/jscode.cpython-39.pyc
+utlis/__pycache__/strEdit.cpython-39.pyc
