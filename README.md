@@ -5,6 +5,13 @@
 
 这里呢就采用模拟浏览器通过调用js来直接写入账号密码进行请求，来快速达到测试效果。
 
+# 更新
+
+最新在土司学习了一下通过cdp 协议打断点 直接调用加密函数，感觉不错就添加了一下
+
+使用案例
+https://www.t00ls.com/thread-69976-1-1.html
+
 ### 爆破模式：完全模仿Burp Site
 
 ```
@@ -47,11 +54,11 @@ jietu:截图
 python3 -m playwright install
 
 ## 演示视频
-链接: 链接: https://pan.baidu.com/s/1MVjXVZFB_mPND0SYZRCnIw 提取码: ch3n 
+链接: 链接: https://pan.baidu.com/s/1MVjXVZFB_mPND0SYZRCnIw 提取码: ch3n
 
 
 
-# 两种请求模式。 自动 和手动 ，自动模式针对标准后台登录网站 输入账户密码字典就可以爆破 
+# 两种请求模式。 自动 和手动 ，自动模式针对标准后台登录网站 输入账户密码字典就可以爆破
 
 ![image](https://github.com/gubeihc/blasting/blob/main/image/zd.png)
 
