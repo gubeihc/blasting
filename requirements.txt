@@ -5,3 +5,6 @@ playwright==1.27.1
 PyQt6==6.4.0
 qasync==0.23.0
 pyqtdarktheme==1.1.0
+requests==2.31.0
+websocket==0.2.1
+aiohttp==3.8.5
