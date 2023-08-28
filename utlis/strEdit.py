@@ -37,6 +37,7 @@ def readfile_scan(name):
     except Exception as e:
         print(e)
 
+
 def websocket_conn():
     # websocket_conn 连接
     resp = requests.get('http://127.0.0.1:9222/json')

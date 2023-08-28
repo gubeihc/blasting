@@ -18,7 +18,6 @@ class Ui_MainWindow(object):
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 
-    # app.setStyleSheet(qdarktheme.load_stylesheet())
     app.setStyleSheet(qdarktheme.load_stylesheet("light"))
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)

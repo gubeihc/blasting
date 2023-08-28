@@ -17,6 +17,7 @@ from utlis.strEdit import MLineEdit
 from utlis.strEdit import cdpencode
 from utlis.strEdit import readfile_scan
 from utlis.jscode import httpRaw, performJs, performjs_code, performJs_yzm_code, jsRequest, jsRequest_code
+from utlis.tools import returndictionary
 
 
 class Ui(object):
@@ -47,7 +48,7 @@ class Ui(object):
                 if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
                     print(self.zd_yzm_text.text(), "json ")
                     if self.yzm_list.count(
-                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
                         self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                         self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                         self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
@@ -57,7 +58,7 @@ class Ui(object):
                     if self.zd_yzm_text.text() in await response.text() or self.sd_yzm_text.text() in await response.text():
                         print(self.zd_yzm_text.text(), "html 内容")
                         if self.yzm_list.count(
-                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
                             self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                             self.yzm_list.append(
                                 (self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
@@ -89,9 +90,9 @@ class Ui(object):
                 remove(name)
 
             if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
-                    await page_two.content()):
+                await page_two.content()):
                 if self.yzm_list.count(
-                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                    (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
                     self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                     self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                     self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
@@ -118,9 +119,9 @@ class Ui(object):
                     remove(name)
 
                 if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
-                        await page_two.content()):
+                    await page_two.content()):
                     if self.yzm_list.count(
-                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
                         self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                         self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
                         self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
@@ -356,7 +357,7 @@ class Ui(object):
     async def on_paused(self, event):
         call_frame_id = event["callFrames"][0]["callFrameId"]
         self.CallFrameId = call_frame_id
-        print(self.CallFrameId)
+        print("cdp断点捕获成功", self.CallFrameId)
 
     async def add_listener(self, clients, page):
         # Enable the debugger to listen for pause events.
@@ -778,9 +779,9 @@ class Ui(object):
         self.cdp_proxy = QtWidgets.QLineEdit(self.BLAST_cdp)
         self.cdp_proxy.setGeometry(QtCore.QRect(80, 10, 110, 20))
         self.cdp_proxy.setObjectName("cdp_proxy")
-        self.cdp_save_response = QtWidgets.QCheckBox(self.BLAST_cdp)
-        self.cdp_save_response.setGeometry(QtCore.QRect(230, 40, 140, 20))
-        self.cdp_save_response.setObjectName("cdp_save_response")
+        # self.cdp_save_response = QtWidgets.QCheckBox(self.BLAST_cdp)
+        # self.cdp_save_response.setGeometry(QtCore.QRect(230, 40, 140, 20))
+        # self.cdp_save_response.setObjectName("cdp_save_response")
         self.cdp_mode_list = QtWidgets.QComboBox(self.BLAST_cdp)
         self.cdp_mode_list.setGeometry(QtCore.QRect(330, 10, 140, 20))
         self.cdp_mode_list.setObjectName("cdp_mode_list")
@@ -852,10 +853,7 @@ class Ui(object):
         self.cdp_mode_list_user = QtWidgets.QComboBox(self.tab_user)
         self.cdp_mode_list_user.setGeometry(QtCore.QRect(120, 200, 320, 30))
         self.cdp_mode_list_user.setObjectName("cdp_mode_list_user")
-        self.cdp_mode_list_user.addItem("")
-        self.cdp_mode_list_user.addItem("")
-        self.cdp_mode_list_user.addItem("")
-        self.cdp_mode_list_user.addItem("")
+
         self.tabWidget_user_passwd.addTab(self.tab_user, "")
         self.tab_pass = QtWidgets.QWidget()
         self.tab_pass.setObjectName("tab_pass")
@@ -884,27 +882,8 @@ class Ui(object):
         self.cdp_mode_listpass = QtWidgets.QComboBox(self.tab_pass)
         self.cdp_mode_listpass.setGeometry(QtCore.QRect(120, 200, 320, 30))
         self.cdp_mode_listpass.setObjectName("cdp_mode_listpass")
-        self.cdp_mode_listpass.addItem("")
-        self.cdp_mode_listpass.addItem("")
-        self.cdp_mode_listpass.addItem("")
-        self.cdp_mode_listpass.addItem("")
         self.tabWidget_user_passwd.addTab(self.tab_pass, "")
         MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1240, 37))
-        self.menubar.setObjectName("menubar")
-        self.test_menu = QtWidgets.QMenu(self.menubar)
-        self.test_menu.setObjectName("test_menu")
-        self.help_menu = QtWidgets.QMenu(self.menubar)
-        self.help_menu.setObjectName("help_menu")
-        MainWindow.setMenuBar(self.menubar)
-        self.actionquit = QtGui.QAction(MainWindow)
-        self.actionquit.setObjectName("actionquit")
-        self.help_menu.addSeparator()
-        self.help_menu.addAction(self.actionquit)
-        self.menubar.addAction(self.help_menu.menuAction())
-        self.menubar.addAction(self.test_menu.menuAction())
-
         self.retranslateUi(MainWindow)
         self.tabWidget_mode.setCurrentIndex(2)
         self.tabWidget_user_passwd.setCurrentIndex(0)
@@ -912,7 +891,7 @@ class Ui(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("window", "BLAST v3.0 by shg-sec.com"))
+        MainWindow.setWindowTitle(_translate("window", "BLAST v3.1 by CVES实验室"))
         self.suspended_button.setText(_translate("MainWindow", "暂停爆破"))
         self.export_button.setText(_translate("MainWindow", "导出数据"))
         self.restart_button.setText(_translate("MainWindow", "重启爆破"))
@@ -968,7 +947,7 @@ class Ui(object):
         self.cdp_proxy_lable.setText(_translate("MainWindow", "代理"))
         self.cdp_proxy.setPlaceholderText("http://127.0.0.1:8080")
 
-        self.cdp_save_response.setText(_translate("MainWindow", "是否保存请求响应"))
+        # self.cdp_save_response.setText(_translate("MainWindow", "是否保存请求响应"))
         self.cdp_mode_list.setItemText(0, _translate("MainWindow", "sniper:狙击手"))
         self.cdp_mode_lab.setText(_translate("MainWindow", "爆破模式"))
         self.cdp_Add_code.setText(_translate("MainWindow", "jscode参数"))
@@ -982,25 +961,23 @@ class Ui(object):
         self.Clear_list_button_user.setText(_translate("MainWindow", "Clear"))
         self.Paste_text_button_user.setText(_translate("MainWindow", "Paste"))
         self.add_text_button_user.setText(_translate("MainWindow", "Add"))
-        self.cdp_mode_list_user.setItemText(0, _translate("MainWindow", "用户字典"))
-        self.cdp_mode_list_user.setItemText(1, _translate("MainWindow", "弱口令_top100"))
-        self.cdp_mode_list_user.setItemText(2, _translate("MainWindow", "数字_1-100"))
-        self.cdp_mode_list_user.setItemText(3, _translate("MainWindow", "随机字符串"))
+        self.cdp_mode_list_user.addItem(_translate("MainWindow", "用户字典"))
+        self.cdp_mode_list_user.addItem(_translate("MainWindow", "用户名_top10"))
+        self.cdp_mode_list_user.addItem(_translate("MainWindow", "用户名_top100"))
+        self.cdp_mode_list_user.addItem(_translate("MainWindow", "用户名数字_1-100"))
+
         self.tabWidget_user_passwd.setTabText(self.tabWidget_user_passwd.indexOf(self.tab_user),
                                               _translate("MainWindow", "用户名"))
         self.Paste_text_button_pass.setText(_translate("MainWindow", "Paste"))
         self.Load_file_button_pass.setText(_translate("MainWindow", "Load"))
         self.Clear_list_button_pass.setText(_translate("MainWindow", "Clear"))
         self.add_text_button_pass.setText(_translate("MainWindow", "Add"))
-        self.cdp_mode_listpass.setItemText(0, _translate("MainWindow", "密码字典"))
-        self.cdp_mode_listpass.setItemText(1, _translate("MainWindow", "弱口令_top100"))
-        self.cdp_mode_listpass.setItemText(2, _translate("MainWindow", "数字_1-100"))
-        self.cdp_mode_listpass.setItemText(3, _translate("MainWindow", "随机字符串"))
+        self.cdp_mode_listpass.addItem(_translate("MainWindow", "密码字典"))
+        self.cdp_mode_listpass.addItem(_translate("MainWindow", "弱口令_top10"))
+        self.cdp_mode_listpass.addItem(_translate("MainWindow", "弱口令_top100"))
+        self.cdp_mode_listpass.addItem(_translate("MainWindow", "密码数字_1-100"))
         self.tabWidget_user_passwd.setTabText(self.tabWidget_user_passwd.indexOf(self.tab_pass),
                                               _translate("MainWindow", "密码"))
-        self.test_menu.setTitle(_translate("MainWindow", "测试"))
-        self.help_menu.setTitle(_translate("MainWindow", "帮助"))
-        self.actionquit.setText(_translate("MainWindow", "quit"))
 
         self.announcement.setText(
             "本工具仅能在取得足够合法授权的企业安全建设中使用，在使用本工具过程中，您应确保自己所有行为符合当地的法律法规。 如您在使用本工具的过程中存在任何非法行为，您将自行承担所有后果，本工具所有开发者和所有贡献者不承担任何法律及连带责任。 除非您已充分阅读、完全理解并接受本协议所有条款，否则，请您不要安装并使用本工具。 您的使用行为或者您以其他任何明示或者默示方式表示接受本协议的，即视为您已阅读并同意本协议的约束。")
@@ -1038,6 +1015,21 @@ class Ui(object):
             except  Exception as e:
                 print("这里出现错误了", e)
 
+    # 添加用户名或者密码字典函数
+    def Add_buttondictionary_user(self):
+        if self.cdp_mode_list_user.currentText() == "用户字典":
+            return
+        datalist = returndictionary(self.cdp_mode_list_user.currentText())
+        for key in datalist:
+            self.password_result_text_user.append(str(key))
+
+    def Add_buttondictionary_pass(self):
+        if self.cdp_mode_listpass.currentText() == "密码字典":
+            return
+        datalist = returndictionary(self.cdp_mode_listpass.currentText())
+        for key in datalist:
+            self.password_result_text_pass.append(str(key))
+
     def ui_set(self, MainWindow, loop):
         self.setupUi(MainWindow)
 
@@ -1069,6 +1061,10 @@ class Ui(object):
         # add code添加标记
         self.cdp_pass_code.clicked.connect(lambda: self.cdp_mark_selected_text_pass())
         self.cdp_Add_code.clicked.connect(lambda: self.cdp_mark_selected_text_jscode())
+
+        # 添加字典
+        self.cdp_mode_list_user.currentIndexChanged.connect(lambda: self.Add_buttondictionary_user())
+        self.cdp_mode_listpass.currentIndexChanged.connect(lambda: self.Add_buttondictionary_pass())
 
 
 settings = Ui()
