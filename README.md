@@ -5,7 +5,17 @@
 
 这里呢就采用模拟浏览器通过调用js来直接写入账号密码进行请求，来快速达到测试效果。
 
+# 添加交流群
+
+QQ群 923369496
+
+
+![image](https://github.com/gubeihc/blasting/blob/main/image/qq.pic.jpg)
+
+
+
 # 更新
+
 
 最新在土司学习了一下通过cdp 协议打断点 直接调用加密函数，感觉不错就添加了一下
 
