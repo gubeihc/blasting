@@ -8,3 +8,5 @@ pyqtdarktheme==1.1.0
 requests==2.31.0
 websocket==0.2.1
 aiohttp==3.8.5
+loguru==0.7.1
+Pillow==9.5.0
