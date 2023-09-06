@@ -6,6 +6,29 @@ import re
 from PyQt6.QtCore import pyqtSignal, QObject
 
 
+
+# 触发网站img标签下 验证码的点击事件，确保jpg等图片后面跟上 时间戳
+async def js_images_time(page_two):
+    return await page_two.evaluate(
+        '''()=>{
+        // Get all <img> elements on the website
+const images = document.getElementsByTagName('img');
+
+// Trigger click event for each image
+for (let i = 0; i < images.length; i++) {
+  // Attach a click event listener to each image
+  images[i].addEventListener('click', function() {
+    console.log('Image clicked!');
+  });
+
+  // Simulate a click event using dispatchEvent
+  const clickEvent = new Event('click');
+  images[i].dispatchEvent(clickEvent);
+}
+
+        }'''
+    )
+
 async def performJs_yzm_code(page_two, passwd, user, code):
     return await page_two.evaluate('''()=>{
                                                 var urls = [];

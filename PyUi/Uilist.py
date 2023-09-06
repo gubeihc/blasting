@@ -10,13 +10,15 @@ from docx import Document
 from docx.shared import Cm
 from os import remove
 import re
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtWidgets
+from loguru import logger
 
 # 这里是自己写的库
 from utlis.strEdit import MLineEdit
 from utlis.strEdit import cdpencode
 from utlis.strEdit import readfile_scan
-from utlis.jscode import httpRaw, performJs, performjs_code, performJs_yzm_code, jsRequest, jsRequest_code
+from utlis.jscode import httpRaw, performJs, performjs_code, performJs_yzm_code, jsRequest, jsRequest_code, \
+    js_images_time
 from utlis.tools import returndictionary
 
 
@@ -151,18 +153,24 @@ class Ui(object):
             page_two.set_default_timeout(3000 * int(self.zd_delay_text.text()))
             try:
                 await  page_two.goto(url)
+
                 await page_two.wait_for_load_state(state='networkidle')
+                await js_images_time(page_two)
+                await page_two.wait_for_timeout(1000)
                 html = etree.HTML(await  page_two.content())
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
                 yzm = [u for u in img_code_url if
                        not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg', '==')) and len(u) > 1]
                 if len(img_code_url) == 0 or len(yzm) == 0:
+                    logger.info("当前请求并没有发现存在验证码")
                     urls = await performJs(page_two, passwd, user)
                     await page_two.wait_for_timeout(1000)
                     await self.urls_is_os(urls, page_two, setlist, user, passwd)
                 else:
+                    logger.info("当前请求发现验证码，进行验证码识别爆破")
                     yzm = yzm[0].replace('..', '')
+                    print(yzm)
                     img_url = await performjs_code(page_two, yzm)
                     data = img_url.split(",")[1]
                     code = self.ocr.classification(base64.b64decode(data))
@@ -197,6 +205,8 @@ class Ui(object):
                 page_two.on('response', self.on_response)
                 await  page_two.goto(url)
                 await page_two.wait_for_load_state(state='networkidle')
+                await js_images_time(page_two)
+                await page_two.wait_for_timeout(1000)
                 html = etree.HTML(await  page_two.content())
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
