@@ -1,9 +1,9 @@
-import qasync
 import sys
 from PyQt6.QtWidgets import QMainWindow
 import asyncio
 import qdarktheme
 from PyQt6 import QtWidgets
+import qasync
 
 # 这里是自己写的库
 from PyUi.Uilist import settings
