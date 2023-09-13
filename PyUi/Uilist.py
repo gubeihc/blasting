@@ -21,6 +21,8 @@ from utlis.jscode import httpRaw, performJs, performjs_code, performJs_yzm_code,
     js_images_time
 from utlis.tools import returndictionary
 
+background_tasks = set()
+
 
 class Ui(object):
     http = httpRaw()
@@ -188,6 +190,11 @@ class Ui(object):
                 await page_two.wait_for_timeout(timeouts)
                 await page_two.close()
 
+
+
+
+
+
     async def get_url_request_sd(self, context, sem, setlist):
         url = setlist[0]
         self.url = url
@@ -248,68 +255,75 @@ class Ui(object):
         self.zd_start_log.append(str(len(all)))
 
     async def main(self):
-        async with async_playwright() as asp:
-            proxy = self.zd_proxy_text.text() if str(self.zd_proxy_text.text()).startswith(
-                ("http://", "https://")) else None
-            browserLaunchOptionDict = {
-                "headless": self.head,
-                "proxy": {
-                    "server": proxy,
-                }
+        try:
+            async with async_playwright() as asp:
+                proxy = self.zd_proxy_text.text() if str(self.zd_proxy_text.text()).startswith(
+                    ("http://", "https://")) else None
+                browserLaunchOptionDict = {
+                    "headless": self.head,
+                    "proxy": {
+                        "server": proxy,
+                    }
 
-            }
-            if len(self.zd_proxy_text.text()) < 1:
-                print("没有代理")
-                browserLaunchOptionDict.pop("proxy")
-            ## 配置user-agent
-            browse = await  asp.chromium.launch(**browserLaunchOptionDict)
-            user_agent = "Mozilla/4.0 (compatible; MSIE 8.0; AOL 9.6; AOLBuild 4340.168; Windows NT 5.1; Trident/4.0; GTB7.1; .NET CLR 1.0.3705; .NET CLR 1.1.4322; .NET CLR 3.0.04506.30; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727)"
-            context = await browse.new_context(ignore_https_errors=True, user_agent=user_agent)
-            sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
-            while len(self.urls) > 0:
-                try:
-                    for url in self.urls.copy():
-                        task = asyncio.create_task(self.get_url_request(context, sem, url))
-                        task.set_name(url)
-                        self.tasks.append(task)
-                    dones, pendings = await asyncio.wait(self.tasks)
-                except  Exception as e:
-                    print(e)
-            self.zd_start_log.append("爆破程序执行完毕")
-            if self.jietu:
-                self.document.save("弱口令报告.docx")
-                self.zd_start_log.append("生成弱口令报告.docx到当前文件夹")
+                }
+                if len(self.zd_proxy_text.text()) < 1:
+                    print("没有代理")
+                    browserLaunchOptionDict.pop("proxy")
+                ## 配置user-agent
+                browse = await  asp.chromium.launch(**browserLaunchOptionDict)
+                user_agent = "Mozilla/4.0 (compatible; MSIE 8.0; AOL 9.6; AOLBuild 4340.168; Windows NT 5.1; Trident/4.0; GTB7.1; .NET CLR 1.0.3705; .NET CLR 1.1.4322; .NET CLR 3.0.04506.30; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727)"
+                context = await browse.new_context(ignore_https_errors=True, user_agent=user_agent)
+                sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
+                while len(self.urls) > 0:
+                    try:
+                        for url in self.urls.copy():
+                            task = asyncio.create_task(self.get_url_request(context, sem, url))
+                            task.set_name(url)
+                            self.tasks.append(task)
+                        dones, pendings = await asyncio.wait(self.tasks)
+                    except  Exception as e:
+                        print(e)
+                self.zd_start_log.append("爆破程序执行完毕")
+                if self.jietu:
+                    self.document.save("弱口令报告.docx")
+                    self.zd_start_log.append("生成弱口令报告.docx到当前文件夹")
+                await browse.close()
+        except Exception as e:
+            await browse.close()
+            logger.error(f"main 启动遇到问题咯 {e}")
 
     def start_cdp_button(self, loop):
         try:
             taskss = asyncio.all_tasks()
             for key in taskss:
-                if "Ui_window.main_cdp" not in key.get_name():
+                if "Ui.main_cdp" not in key.get_name():
                     key.cancel()
-            asyncio.ensure_future(self.main_cdp(), loop=loop)
+            start = asyncio.ensure_future(self.main_cdp(), loop=loop)
+            background_tasks.add(start)
+            start.add_done_callback(lambda t: background_tasks.remove(t))
 
         except Exception as e:
             print(e, "cdp开启错误")
 
     async def main_cdp(self):
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch_persistent_context(
-                headless=False,
-                devtools=True,
-                ignore_https_errors=False,
-                args=['--remote-debugging-port=9222', '--remote-allow-origins=*',
-                      '--remote-debugging-address=127.0.0.1'],
+        try:
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch_persistent_context(
+                    headless=False,
+                    devtools=True,
+                    ignore_https_errors=False,
+                    args=['--remote-debugging-port=9222', '--remote-allow-origins=*',
+                          '--remote-debugging-address=127.0.0.1'],
 
-                user_data_dir="./my_data_dir",
-            )
-            try:
+                    user_data_dir="./my_data_dir",
+                )
                 page = await browser.new_page()
                 print("启动URL", self.target_url.text())
                 await page.goto(self.target_url.text())
                 await self.add_listener(browser, page)
                 await page.wait_for_timeout(10000000)
-            except Error as e:
-                print(e, "启动报错")
+        except Error as e:
+            logger.error(str(e))
 
     def blastingMode_cdp(self, mode: str):
         code = self.cdp_req_raw_text.toPlainText()
@@ -492,7 +506,7 @@ class Ui(object):
         self.log_clear()
         taskss = asyncio.all_tasks()
         for key in taskss:
-            if "Task" not in key.get_name():
+            if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
                 self.urls.add(tuple(eval(key.get_name())))
                 key.cancel()
                 continue
@@ -996,23 +1010,34 @@ class Ui(object):
     def get_start(self, loop):
         self.log_clear()
         if self.tabWidget_mode.currentIndex() == 0:
+            logger.success("启动自动爆破模式 ")
+            taskss = asyncio.all_tasks()
+            logger.info(f"当前存在多少异步循环 {len(taskss)}")
+            for key in taskss:
+                key.cancel()
             try:
                 mode = self.zd_mode_list.currentText()
                 self.blastingMode(mode)
                 self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main(), loop=loop)
+                start = asyncio.ensure_future(self.main(),loop=loop)
+                background_tasks.add(start)
+                start.add_done_callback(lambda t: background_tasks.remove(t))
             except  Exception as e:
                 self.zd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 1:
+            logger.success("启动手动爆破模式 ")
             mode = self.sd_mode_list.currentText()
             self.blastingMode(mode)
             self.sd_start_log.append("手动请求模式启动！")
             try:
                 self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main_sd(), loop=loop)
+                start=asyncio.ensure_future(self.main_sd(), loop=loop)
+                background_tasks.add(start)
+                start.add_done_callback(lambda t: background_tasks.remove(t))
             except  Exception as e:
                 self.sd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 2:
+            logger.success("启动cdp 断点爆破模式")
             mode = self.cdp_mode_list.currentText()
             datalist, canshu = self.blastingMode_cdp(mode)
             self.http.update_date.connect(self.resultlogapp)
@@ -1042,7 +1067,6 @@ class Ui(object):
 
     def ui_set(self, MainWindow, loop):
         self.setupUi(MainWindow)
-
         self.start_button.clicked.connect(lambda: self.get_start(loop))
         # # 暂停，重启按钮
         self.restart_button.clicked.connect(lambda: self.reget_start(loop))
