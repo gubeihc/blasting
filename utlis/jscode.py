@@ -1,27 +1,27 @@
 import json
-
 import aiohttp
 import asyncio
 import re
 from PyQt6.QtCore import pyqtSignal, QObject
 
 
-
-# 触发网站img标签下 验证码的点击事件，确保jpg等图片后面跟上 时间戳
 async def js_images_time(page_two):
+    '''
+    触发网站img标签下 验证码的点击事件，确保jpg等图片后面跟上 时间戳，并对每一个图片设置跨域防止请求错误。
+    :param page_two: 浏览器界面
+    :return:
+    '''
     return await page_two.evaluate(
         '''()=>{
-        // Get all <img> elements on the website
 const images = document.getElementsByTagName('img');
 
-// Trigger click event for each image
 for (let i = 0; i < images.length; i++) {
-  // Attach a click event listener to each image
+images[i].setAttribute('crossorigin', 'anonymous')
+
   images[i].addEventListener('click', function() {
     console.log('Image clicked!');
   });
 
-  // Simulate a click event using dispatchEvent
   const clickEvent = new Event('click');
   images[i].dispatchEvent(clickEvent);
 }
@@ -29,65 +29,23 @@ for (let i = 0; i < images.length; i++) {
         }'''
     )
 
-async def performJs_yzm_code(page_two, passwd, user, code):
-    return await page_two.evaluate('''()=>{
-                                                var urls = [];
-                                                var checkbox_list=[];
-                                                let user='';
-                                                let password='';
-                                                let u;
-                                                let c;
-                                                let form = document.getElementsByTagName('input');
-                                                for (let i = 0; i < form.length; i++) {
-                                                    if (form[i].type == 'password') {
-                                                        form[i].value = '%s'
-                                                         password=form[i].value
-                                                         form[i].dispatchEvent(new CustomEvent('input'))
-                                                         u = i - 1
-                                                         form[u].value = '%s'
-                                                         form[u].dispatchEvent(new CustomEvent('input'))
-                                                         username=form[u].value
-                                                        c = i+1
-                                                        form[c].value = '%s'
-                                                         form[c].dispatchEvent(new CustomEvent('input'))
-
-                                                    }
-                                                    if (form[i].type == 'checkbox' && form[i].checked==false){
-                                                     form[i].click()
-                                     }
-                                                    if (form[i].type == 'submit') {
-                                                                urls.push(user,password)
-                                                        form[i].click()
-                                                    }
-                                                    if (form[i].type=='image'){
-                                                        urls.push(user,password)
-                                                        form[i].click()
-                                                    }
-                                                     if (form[i].type=='button'){
-                                                        urls.push(user,password)
-                                                        form[i].click()
-                                                    }
-
-                                                }
-
-
-                                                return urls;
-                                                                    }''' % (passwd, user, code))
-
 
 async def performjs_code(page_two, yzm):
     return await page_two.evaluate('''()=>{
-                                 var arrImg = document.images;
+                               
+                               var arrImg = document.images;
+                                 var datatext=''
+                            var canvas = document.createElement("canvas");
+                              var ctx = canvas.getContext("2d");
                                  for (let i = 0; i < arrImg.length; i++){
                                  if (arrImg[i].src.includes('%s')) {
-                                     var canvas = document.createElement("canvas");
-                                     canvas.width = arrImg[i].width;
-                                     canvas.height = arrImg[i].height;
-                                     var ctx = canvas.getContext("2d");
-                                     ctx.drawImage(arrImg[i], 0, 0, arrImg[i].width, arrImg[i].height);
-                                     var ext = arrImg[i].src.substring(arrImg[i].src.lastIndexOf(".") + 1).toLowerCase();
-                                     var dataURL = canvas.toDataURL("image/" + ext)
-                                  }
+                                 canvas.width = arrImg[i].width;
+                                  canvas.height = arrImg[i].height;
+                                 ctx.drawImage(arrImg[i],0,0,arrImg[i].width, arrImg[i].height);
+                                 datatext = arrImg[i].src.substring(arrImg[i].src.lastIndexOf(".") + 1).toLowerCase()
+                                 var dataURL = canvas.toDataURL("image/" + datatext)
+                                console.log(dataURL)
+                                 }
                                  }
                                  return dataURL
                                  }
@@ -95,56 +53,97 @@ async def performjs_code(page_two, yzm):
                                    % yzm)
 
 
-async def performJs(page_two, passwd, user):
+async def performjs(page_two, passwd, user):
     return await page_two.evaluate('''()=>{
-                                    var urls = [];
-                                    var checkbox_list = [];
-                                    let user='';
-                                    let password='';
-                                    let u;
-                                    let form = document.getElementsByTagName('input');
-                                    for (let i = 0; i < form.length; i++) {
-                                        if (form[i].type == 'password') {
-                                            form[i].value = '%s'
-                                            password=form[i].value
-                                            form[i].dispatchEvent(new CustomEvent('input'))
-                                            u = i - 1
-                                            form[u].value = '%s'
-                                            form[u].dispatchEvent(new CustomEvent('input'))
+const urls = [];
+let username = '';
+let password = '';
+const forms = document.getElementsByTagName('input');
+const checkboxes = [];
 
-                                            username=form[u].value
-                                        }
-                                        if (form[i].type == 'checkbox'){
-                                             checkbox_list.push(form[i])
-                                        }
-                                        if (form[i].type == 'submit') {
-                                                    urls.push(user,password)
-                                            form[i].dispatchEvent(new CustomEvent('input'))
+for (let i = 0; i < forms.length; i++) {
+  if (forms[i].type === 'password') {
+    password = '%s';
+    forms[i].setAttribute("value",password);
+    forms[i].dispatchEvent( new Event('change', { bubbles: true }));
+    forms[i].dispatchEvent( new Event('input', { bubbles: true }));
 
-                                            form[i].click()
-                                        }
-                                        if (form[i].type=='image'){
-                                            form[i].dispatchEvent(new CustomEvent('input'))
+    const prevIndex = i - 1;
+    username = '%s';
+    forms[prevIndex].setAttribute("value",username);
+    forms[prevIndex].dispatchEvent( new Event('change', { bubbles: true }));
+    forms[prevIndex].dispatchEvent( new Event('input', { bubbles: true }));
 
-                                            urls.push(user,password)
-                                            form[i].click()
-                                        }
-                                         if (form[i].type=='button'){
-                                        form[i].dispatchEvent(new CustomEvent('input'))
-                                            urls.push(user,password)
-                                            form[i].click()
-                                        }
-                                    }
-                                    for (let e = 0; e < checkbox_list.length; e++) {
-                                             checkbox_list[e].click()
+  } else if (forms[i].type === 'checkbox') {
+    checkboxes.push(forms[i]);
+  } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
+    forms[i].dispatchEvent(new CustomEvent('input'));
+    if (forms[i].style.display === 'none') {
+      continue;
+    }
+    forms[i].click();
+    urls.push('isok');
+  }
+}
 
-                                    }
+if (urls.length === 0) {
+  const buttonForm = document.getElementsByTagName('button');
+  if (buttonForm.length > 0) {
+      urls.push('isok');
+    buttonForm[0].click();
+    console.log('js input 输入没找到 采用button提交 ');
+  }
+}
 
-                                    return urls;
+return urls;
                                                         }''' % (passwd, user))
 
 
-async def jsRequest(page_two, namepath, passpath, user, passwd, loginpath):
+async def performjs_yzm_code(page_two, passwd, user, code):
+    return await page_two.evaluate('''()=>{
+                                                const urls = [];
+let username = '';
+let password = '';
+
+const forms = document.getElementsByTagName('input');
+for (let i = 0; i < forms.length; i++) {
+  if (forms[i].type === 'password') {
+    password = '%s';
+    forms[i].setAttribute("value",password);
+    forms[i].dispatchEvent( new Event('change', { bubbles: true }));
+    forms[i].dispatchEvent( new Event('input', { bubbles: true }));
+    // 获取用户名并存储到变量 username 中
+    const prevIndex = i - 1;
+    username = '%s';
+    forms[prevIndex].setAttribute("value",username);
+    forms[prevIndex].dispatchEvent( new Event('change', { bubbles: true }));
+    forms[prevIndex].dispatchEvent( new Event('input', { bubbles: true }));
+
+    const nextIndex = i + 1;
+    yanzm = '%s'
+    forms[nextIndex].setAttribute("value",yanzm);
+    forms[nextIndex].dispatchEvent( new Event('change', { bubbles: true }));
+    forms[nextIndex].dispatchEvent( new Event('input', { bubbles: true }));
+  } else if (forms[i].type === 'checkbox' && !forms[i].checked) {
+    forms[i].click();
+  } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
+    urls.push({username, password});
+    forms[i].click();
+  }
+}
+                                 if (urls.length === 0) {
+  const buttonForm = document.getElementsByTagName('button');
+  if (buttonForm.length > 0) {
+    buttonForm[0].click();
+    console.log('js input 输入没找到button 通过 ');
+  }
+}
+return urls;
+
+                                                                    }''' % (passwd, user, code))
+
+
+async def jsrequest(page_two, namepath, passpath, user, passwd, loginpath):
     return await page_two.evaluate('''()=>{
 
                              function x(xpath) {
@@ -152,17 +151,23 @@ async def jsRequest(page_two, namepath, passpath, user, passwd, loginpath):
        return result.iterateNext()
      };
 
-                 var name = x('%s');
+                 var username = x('%s');
                  var password = x('%s');
-                 name.value =  '%s';
-                 password.value= '%s';
+                 
+                 username.setAttribute("value",'%s');
+                 username.dispatchEvent( new Event('change', { bubbles: true }));
+                 username.dispatchEvent( new Event('input', { bubbles: true }));
+                                  
+                 password.setAttribute("value",'%s');
+                 password.dispatchEvent( new Event('change', { bubbles: true }));
+                 password.dispatchEvent( new Event('input', { bubbles: true }));
                  var but = x('%s');
                  but.click();
                                                                                  }''' % (
         namepath, passpath, user, passwd, loginpath))
 
 
-async def jsRequest_code(page_two, namepath, passpath, codepath, user, passwd, code, loginpath):
+async def jsrequest_code(page_two, namepath, passpath, codepath, user, passwd, code, loginpath):
     return await page_two.evaluate('''()=>{
 
                                  function x(xpath) {
@@ -170,18 +175,25 @@ async def jsRequest_code(page_two, namepath, passpath, codepath, user, passwd, c
            return result.iterateNext()
          }
 
-                     var name = x('%s');
+                     var username = x('%s');
                      var password = x('%s');
                      var yzm = x('%s');
-                     name.value= '%s'
-                     password.value =  '%s'
-                     yzm.value =  '%s'
+                     
+                username.setAttribute("value",'%s');
+                 username.dispatchEvent( new Event('change', { bubbles: true }));
+                 username.dispatchEvent( new Event('input', { bubbles: true }));
+                                  
+                 password.setAttribute("value",'%s');
+                 password.dispatchEvent( new Event('change', { bubbles: true }));
+                 password.dispatchEvent( new Event('input', { bubbles: true }));
+                     
+                yzm.setAttribute("value",'%s');
+                 yzm.dispatchEvent( new Event('change', { bubbles: true }));
+                 yzm.dispatchEvent( new Event('input', { bubbles: true }));
                      var but = x('%s')
                      but.click()
                                                                                      }''' % (
         namepath, passpath, codepath, user, passwd, code, loginpath))
-
-    # 判断url是否爆破成功
 
 
 class httpRaw(QObject):
@@ -191,7 +203,8 @@ class httpRaw(QObject):
     datalist = []
     canshu = []
 
-    async def post_req(self, path, header, data, ca):
+    # noinspection PyUnresolvedReferences
+    async def post_req(self, path, header, datastr, ca):
         url = header.get("Host").strip()
         urls = "http://" + url + path
         async with self.sem:
@@ -199,8 +212,8 @@ class httpRaw(QObject):
                 try:
                     if "application/json" in header.get("Content-Type"):
                         print("json")
-                        print(data)
-                        async with session.post(urls, ssl=False, json=data,
+                        print(datastr)
+                        async with session.post(urls, ssl=False, json=datastr,
                                                 proxy=self.proxy) as resp:
                             html = await resp.text()
                             title = await self.titles(html)
@@ -208,32 +221,18 @@ class httpRaw(QObject):
                             self.update_date.emit(
                                 f"status: {resp.status} url: {resp.url} title: {title} len: {len(html)} 参数: {ca}")
                     else:
-                        async with session.post(urls, ssl=False, data=data,
+                        async with session.post(urls, ssl=False, data=datastr,
                                                 proxy=self.proxy) as resp:
                             html = await resp.text()
                             title = await self.titles(html)
                             print(resp.status, resp.url, len(html))
+                            # noinspection PyUnresolvedReferences
                             self.update_date.emit(
                                 f"status: {resp.status} url: {resp.url} title: {title} len: {len(html)} 参数: {ca}")
 
                         # result
                 except Exception as e:
                     print(e)
-
-    #
-    async def get_req(self, path, header):
-        urls = header.get("Host").strip()
-        url = "http://" + urls + path
-        print(url)
-        async with aiohttp.ClientSession(headers=header) as session:
-            try:
-                # async with session.get("https://www.baidu.com", ssl=False) as resp:
-                async with session.get(url, ssl=False) as resp:
-                    print(resp.status, resp.url, len(await resp.text()))
-                    print("=======" * 10)
-                    print(await resp.text())
-            except Exception as e:
-                print(e)
 
     async def titles(self, html):
         titles = (
@@ -267,11 +266,12 @@ class httpRaw(QObject):
             # 遍历每个键值对，将其按冒号分割，然后生成一个新的字典
             d = {}
             for p in pairs:
+                # noinspection PyBroadException
                 try:
                     k, v = p.split(': ')
                     d[k] = v
                 except Exception as e:
-                    pass
+                    print(e)
             return path, d, data
         elif mode == "POST" and "Content-Type: application/json" in raw:
             data_start_index = raw.index(
@@ -287,7 +287,7 @@ class httpRaw(QObject):
                     k, v = p.split(': ')
                     d[k] = v
                 except Exception as e:
-                    pass
+                    print(e)
             return path, d, json_data
         elif mode == "GET":
             path = raw.split()[1]
@@ -299,28 +299,8 @@ class httpRaw(QObject):
                     k, v = p.split(': ')
                     d[k] = v
                 except Exception as e:
-                    pass
+                    print(e)
             return path, d
-
-    async def main(self):
-        # http://172.81.234.61/
-        raw = '''
-POST /api/authentication/user/loginWithCaptcha HTTP/1.1
-Host: www.baidu.com
-Accept: application/json, text/plain, */*
-User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.5249.62 Safari/537.36
-Content-Type: application/json;charset=UTF-8
-Origin: http://www.baidu.com
-Referer: http://www.baidu.com
-Accept-Encoding: gzip, deflate
-Accept-Language: zh-CN,zh;q=0.9
-Cookie: HWWAFSESID=28f1176cae42894b96; HWWAFSESTIME=1690296326365
-Connection: close
-
-{"captchaUuid":"bd8c0b104b454a38aa3cd4d65f041185","captchaValue":"155","loginName":"qwet","password":"3e744b9dc39389baf0c5a0660589b8402f3dbb49b89b3e75f2c9355852a3c677"}
-        '''
-        path, headrs, data = self.parser_raw(raw)
-        await self.post_req(path, headrs, data, "test")
 
     async def rundatalist(self):
         result = []
@@ -331,5 +311,4 @@ Connection: close
 
 
 if __name__ == '__main__':
-    data = httpRaw()
-    asyncio.run(data.main())
+    pass

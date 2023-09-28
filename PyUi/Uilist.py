@@ -1,23 +1,22 @@
 from PyQt6.QtWidgets import QFileDialog, QApplication
 from PyQt6.QtGui import QGuiApplication
+
 import asyncio
 from playwright.async_api import async_playwright, Error
 from lxml import etree
 from ddddocr import DdddOcr
 import base64
 from pathlib import Path
-from docx import Document
-from docx.shared import Cm
-from os import remove
 import re
 from PyQt6 import QtCore, QtWidgets
 from loguru import logger
+from functools import partial
 
 # 这里是自己写的库
 from utlis.strEdit import MLineEdit
 from utlis.strEdit import cdpencode
 from utlis.strEdit import readfile_scan
-from utlis.jscode import httpRaw, performJs, performjs_code, performJs_yzm_code, jsRequest, jsRequest_code, \
+from utlis.jscode import httpRaw, performjs, performjs_code, performjs_yzm_code, jsrequest, jsrequest_code, \
     js_images_time
 from utlis.tools import returndictionary
 
@@ -33,7 +32,6 @@ class Ui(object):
         self.url = ''
         self.urls = set()
         self.head = True
-        self.jietu = False
         self.yzm_list = []
         self.ocr = DdddOcr(show_ad=False)
         self.tasks = []
@@ -41,35 +39,35 @@ class Ui(object):
             'username': '',
             'password': ''
         }
-        self.document = Document()
-        self.document.add_heading("爆破程序执行截图", level=1)
         self.CallFrameId = ''
+        # 添加一个node计数器，先默认一个node可以请求300次，如果大于300，暂停重启一下。
+        self.node = 0
+
+    async def addyzm_list(self):
+        if self.yzm_list.count(
+                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
+            self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+            self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
+            self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+            self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
 
     async def on_response(self, response):
         if response.request.method == 'POST':
             try:
                 html = await response.json()
                 if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
-                    print(self.zd_yzm_text.text(), "json ")
-                    if self.yzm_list.count(
-                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                        self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                        self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-            except  Exception as e:
+                    logger.debug(f"{self.zd_yzm_text.text()} json")
+                    await self.addyzm_list()
+            except Exception as e:
+                logger.debug(f"获取验证码错误值进行匹配 {e}")
                 try:
-                    if self.zd_yzm_text.text() in await response.text() or self.sd_yzm_text.text() in await response.text():
-                        print(self.zd_yzm_text.text(), "html 内容")
-                        if self.yzm_list.count(
-                            (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                            self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                            self.yzm_list.append(
-                                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                            self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                            self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+                    if (self.zd_yzm_text.text() in await response.text()
+                            or self.sd_yzm_text.text() in await response.text()):
+                        logger.debug(f"{self.zd_yzm_text.text()} html 内容")
+
+                    await self.addyzm_list()
                 except Exception as e:
-                    pass
+                    logger.debug(f"获取验证码错误值进行匹配 {e}")
 
     def log_clear(self):
         self.zd_start_log.clear()
@@ -78,72 +76,38 @@ class Ui(object):
         self.urls.clear()
         self.tasks.clear()
 
-    def save_jietu(self, target, name, password, tp):
-        self.document.add_heading(f'目标地址:{target}', level=2)
-        self.document.add_paragraph(f"用户名：{name} 密码：{password}")
-        self.document.add_picture(f'{tp}', width=Cm(14), height=Cm(10))
-
     async def urls_is_os(self, urls, page_two, setlist, user, passwd):
         if len(urls) != 0:
-            result = f'title:{await page_two.title()} {page_two.url}  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}'
+            result = (f'title:{await page_two.title()} {page_two.url}  '
+                      f'长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
+            logger.info(
+                f"通过js提交  title:{await page_two.title()}  {page_two.url} "
+                f"长度:{len(await page_two.content())} 账户 {user} 密码 {passwd} ")
             self.result_text.append(str(' {}'.format(result)))
-            if self.jietu:
-                name = user + passwd + '.png'
-                await  page_two.screenshot(path=f'{name}', )
-                self.save_jietu(setlist[0], user, passwd, name)
-                remove(name)
-
             if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
-                await page_two.content()):
-                if self.yzm_list.count(
-                    (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                    self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                    self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                    self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                    self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                    timeouts = int(self.zd_delay_text.text()) * 1000
-                    await page_two.wait_for_timeout(timeouts)
-                    await page_two.close()
-            else:
+                    await page_two.content()):
+                await self.addyzm_list()
+                await page_two.close()
 
+                self.node = self.node + 1
+
+            else:
                 timeouts = int(self.zd_delay_text.text()) * 1000
                 await page_two.wait_for_timeout(timeouts)
+                await page_two.context.clear_cookies()
                 await page_two.close()
+                self.node = self.node + 1
                 self.urls.discard(setlist)
                 self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
         else:
-            try:
-                await page_two.click('//button[@type="submit"] | //button[@type="button"] |//button', timeout=3000)
-                result = f'title:{await page_two.title()} {page_two.url}  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}'
-                self.result_text.append(str('{}'.format(result)))
-                if self.jietu:
-                    name = user + passwd + '.png'
-                    await  page_two.screenshot(path=f'{name}', )
-                    self.save_jietu(setlist[0], user, passwd, name)
-                    remove(name)
+            timeouts = int(self.zd_delay_text.text()) * 1000
+            await page_two.wait_for_timeout(timeouts)
+            await page_two.context.clear_cookies()
+            await page_two.close()
+            self.node = self.node + 1
 
-                if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
-                    await page_two.content()):
-                    if self.yzm_list.count(
-                        (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-                        self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-                        self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                        self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-                        timeouts = int(self.zd_delay_text.text()) * 1000
-                        await page_two.wait_for_timeout(timeouts)
-                        await page_two.close()
-
-                else:
-                    timeouts = int(self.zd_delay_text.text()) * 1000
-                    await page_two.wait_for_timeout(timeouts)
-                    await page_two.close()
-                    self.urls.discard(setlist)
-                    self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
-            except  Exception as e:
-                await page_two.close()
-                self.urls.discard(setlist)
-                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+            self.urls.discard(setlist)
+            self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
 
     async def get_url_request(self, context, sem, setlist):
         url = setlist[0]
@@ -151,49 +115,42 @@ class Ui(object):
         user = setlist[1]
         passwd = setlist[2]
         async with sem:
-            page_two = await context.new_page()
-            page_two.set_default_timeout(3000 * int(self.zd_delay_text.text()))
+            page_two_zd = await context.new_page()
+            page_two_zd.set_default_timeout(3000 * int(self.zd_delay_text.text()))
             try:
-                await  page_two.goto(url)
-
-                await page_two.wait_for_load_state(state='networkidle')
-                await js_images_time(page_two)
-                await page_two.wait_for_timeout(1000)
-                html = etree.HTML(await  page_two.content())
+                await page_two_zd.goto(url)
+                await page_two_zd.wait_for_load_state(state='networkidle')
+                await js_images_time(page_two_zd)
+                await page_two_zd.wait_for_timeout(1000)
+                html = etree.HTML(await page_two_zd.content())
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
                 yzm = [u for u in img_code_url if
                        not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg', '==')) and len(u) > 1]
                 if len(img_code_url) == 0 or len(yzm) == 0:
-                    logger.info("当前请求并没有发现存在验证码")
-                    urls = await performJs(page_two, passwd, user)
-                    await page_two.wait_for_timeout(1000)
-                    await self.urls_is_os(urls, page_two, setlist, user, passwd)
+                    urls = await performjs(page_two_zd, passwd, user)
+                    await page_two_zd.wait_for_timeout(1000)
+                    await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
                 else:
                     logger.info("当前请求发现验证码，进行验证码识别爆破")
                     yzm = yzm[0].replace('..', '')
-                    print(yzm)
-                    img_url = await performjs_code(page_two, yzm)
+                    logger.info(f"当前请求发现存在验证码 使用用户 {user} 使用密码 {passwd}  验证码 {yzm}")
+                    img_url = await performjs_code(page_two_zd, yzm)
                     data = img_url.split(",")[1]
                     code = self.ocr.classification(base64.b64decode(data))
-                    urls = await performJs_yzm_code(page_two, passwd, user, code)
-                    await page_two.wait_for_timeout(1000)
+                    urls = await performjs_yzm_code(page_two_zd, passwd, user, code)
+                    await page_two_zd.wait_for_timeout(1000)
                     self.POSTdata['username'] = user
                     self.POSTdata['password'] = passwd
-                    await self.urls_is_os(urls, page_two, setlist, user, passwd)
-            except  Exception as e:
-                print("函数执行异常", e)
+                    await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
+            except Exception as e:
+                logger.error(f"函数执行异常 {e}")
                 self.urls.discard(setlist)
                 self.zd_start_log.append("队列还剩{}".format(len(self.urls)))
                 self.sd_start_log.append('请求失败{}'.format(setlist))
                 timeouts = int(self.zd_delay_text.text()) * 1000
-                await page_two.wait_for_timeout(timeouts)
-                await page_two.close()
-
-
-
-
-
+                await page_two_zd.wait_for_timeout(timeouts)
+                await page_two_zd.close()
 
     async def get_url_request_sd(self, context, sem, setlist):
         url = setlist[0]
@@ -204,25 +161,25 @@ class Ui(object):
         passpath = self.sd_pass_text.text()
         loginpath = self.sd_login_text.text()
         yzmpath = self.sd_yzm_text_path.text()
-
         async with sem:
             page_two = await context.new_page()
             page_two.set_default_timeout(3000 * int(self.sd_delay_text.text()))
             try:
                 page_two.on('response', self.on_response)
-                await  page_two.goto(url)
+                await page_two.goto(url)
                 await page_two.wait_for_load_state(state='networkidle')
-                await js_images_time(page_two)
+                # await js_images_time(page_two)
                 await page_two.wait_for_timeout(1000)
-                html = etree.HTML(await  page_two.content())
+                html = etree.HTML(await page_two.content())
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
                 yzm = [u for u in img_code_url if
                        not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg', '==')) and len(u) > 1]
                 if len(img_code_url) == 0 or len(yzm) == 0:
-                    await jsRequest(page_two, namepath, passpath, user, passwd, loginpath)
+                    await jsrequest(page_two, namepath, passpath, user, passwd, loginpath)
                     await page_two.wait_for_timeout(1000)
-                    result = f'title:{await page_two.title()} {page_two.url}  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}'
+                    result = (f'title:{await page_two.title()} {page_two.url}'
+                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
                     self.result_text.append(str(' {}'.format(result)))
                     self.urls.discard(setlist)
                     self.sd_start_log.append("请求队列还剩{}".format(len(self.urls)))
@@ -234,15 +191,15 @@ class Ui(object):
                     img_url = await performjs_code(page_two, yzm)
                     data = img_url.split(",")[1]
                     code = self.ocr.classification(base64.b64decode(data))
-                    await jsRequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code, loginpath)
+                    await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code, loginpath)
                     await page_two.wait_for_timeout(1000)
                     self.POSTdata['username'] = user
                     self.POSTdata['password'] = passwd
                     timeouts = int(self.sd_delay_text.text()) * 1000
                     await page_two.wait_for_timeout(timeouts)
                     await page_two.close()
-            except  Exception as e:
-                print(e)
+            except Exception as e:
+                logger.debug(e)
                 self.urls.discard(setlist)
                 self.sd_start_log.append('{}请求失败'.format(setlist))
                 self.sd_start_log.append("队列剩余{}".format(len(self.urls)))
@@ -251,27 +208,32 @@ class Ui(object):
                 await page_two.close()
 
     async def alltasks(self):
-        all = asyncio.all_tasks()
-        self.zd_start_log.append(str(len(all)))
+        allt = asyncio.all_tasks()
+        self.zd_start_log.append(str(len(allt)))
 
-    async def main(self):
+    # 设置回调函数
+    def testnode(self, fut, loop):
+        if self.node >= 300:
+            self.nodewaitingfor()
+            self.reget_start(loop)
+
+    async def main(self, loop):
         try:
             async with async_playwright() as asp:
                 proxy = self.zd_proxy_text.text() if str(self.zd_proxy_text.text()).startswith(
                     ("http://", "https://")) else None
-                browserLaunchOptionDict = {
+                browserlaunchoptiondict = {
                     "headless": self.head,
                     "proxy": {
                         "server": proxy,
                     }
-
                 }
                 if len(self.zd_proxy_text.text()) < 1:
-                    print("没有代理")
-                    browserLaunchOptionDict.pop("proxy")
-                ## 配置user-agent
-                browse = await  asp.chromium.launch(**browserLaunchOptionDict)
-                user_agent = "Mozilla/4.0 (compatible; MSIE 8.0; AOL 9.6; AOLBuild 4340.168; Windows NT 5.1; Trident/4.0; GTB7.1; .NET CLR 1.0.3705; .NET CLR 1.1.4322; .NET CLR 3.0.04506.30; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727)"
+                    browserlaunchoptiondict.pop("proxy")
+                # 配置user-agent
+                browse = await asp.chromium.launch(**browserlaunchoptiondict)
+                user_agent = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                              " (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36")
                 context = await browse.new_context(ignore_https_errors=True, user_agent=user_agent)
                 sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
                 while len(self.urls) > 0:
@@ -279,14 +241,12 @@ class Ui(object):
                         for url in self.urls.copy():
                             task = asyncio.create_task(self.get_url_request(context, sem, url))
                             task.set_name(url)
+                            task.add_done_callback(partial(self.testnode, loop=loop))
                             self.tasks.append(task)
-                        dones, pendings = await asyncio.wait(self.tasks)
-                    except  Exception as e:
-                        print(e)
+                        await asyncio.wait(self.tasks)
+                    except Exception as e:
+                        logger.error(e)
                 self.zd_start_log.append("爆破程序执行完毕")
-                if self.jietu:
-                    self.document.save("弱口令报告.docx")
-                    self.zd_start_log.append("生成弱口令报告.docx到当前文件夹")
                 await browse.close()
         except Exception as e:
             await browse.close()
@@ -303,7 +263,7 @@ class Ui(object):
             start.add_done_callback(lambda t: background_tasks.remove(t))
 
         except Exception as e:
-            print(e, "cdp开启错误")
+            logger.error(f"{e} cdp开启错误")
 
     async def main_cdp(self):
         try:
@@ -318,14 +278,14 @@ class Ui(object):
                     user_data_dir="./my_data_dir",
                 )
                 page = await browser.new_page()
-                print("启动URL", self.target_url.text())
+                logger.success(f"启动URL  {self.target_url.text()}")
                 await page.goto(self.target_url.text())
                 await self.add_listener(browser, page)
                 await page.wait_for_timeout(10000000)
         except Error as e:
             logger.error(str(e))
 
-    def blastingMode_cdp(self, mode: str):
+    def blastingmode_cdp(self, mode: str):
         code = self.cdp_req_raw_text.toPlainText()
         username = self.password_result_text_user.toPlainText().split('\n')
         password = self.password_result_text_pass.toPlainText().split('\n')
@@ -337,18 +297,18 @@ class Ui(object):
         canshu = []
         if mode == 'sniper:狙击手':
             if username_encode:
-                print("用户名加密")
+                logger.success("用户名加密")
                 for key in username:
                     targets.append(re.sub("(§.*➺§)", key, code))
             if password_encode:
-                print("密码加密")
+                logger.success("密码加密")
                 for key in password:
                     targets.append(re.sub("(§➸.*§)", key, code))
                 for value in targets:
                     jscode = re.findall("➸➸(.*)➸➸", value)[0]
                     encode = cdpencode(self.CallFrameId, jscode)
                     result.append(re.sub("➸➸(.*)➸➸", encode, value))
-                    print(encode, re.sub("➸➸(.*)➸➸", encode, value))
+                    logger.info(f"参数 加密之后 {encode} \n {re.sub('➸➸(.*)➸➸', encode, value)}")
                     canshu.append(jscode)
 
             # code标记用来生成字典
@@ -381,7 +341,7 @@ class Ui(object):
     async def on_paused(self, event):
         call_frame_id = event["callFrames"][0]["callFrameId"]
         self.CallFrameId = call_frame_id
-        print("cdp断点捕获成功", self.CallFrameId)
+        logger.info(f"cdp断点捕获成功  {self.CallFrameId}")
 
     async def add_listener(self, clients, page):
         # Enable the debugger to listen for pause events.
@@ -396,7 +356,7 @@ class Ui(object):
         async with async_playwright() as asp:
             proxy = self.sd_proxy_text.text() if str(self.sd_proxy_text.text()).startswith(
                 ("http://", "https://")) else None
-            browserLaunchOptionDict = {
+            browserlaunchoptiondict = {
                 "headless": self.head,
                 "proxy": {
                     "server": proxy,
@@ -404,27 +364,23 @@ class Ui(object):
 
             }
             if len(self.sd_proxy_text.text()) < 1:
-                print("没有代理")
-                browserLaunchOptionDict.pop("proxy")
-            ## 配置user-agent
-            browse = await  asp.chromium.launch(**browserLaunchOptionDict)
+                logger.info("当前手动爆破模式并没有设置代理")
+                browserlaunchoptiondict.pop("proxy")
+            # 配置user-agent
+            browse = await asp.chromium.launch(**browserlaunchoptiondict)
             context = await browse.new_context(ignore_https_errors=True)
             sem = asyncio.Semaphore(int(self.sd_sem_text.text()))
             while len(self.urls) > 0:
                 try:
                     tasks = [asyncio.ensure_future(self.get_url_request_sd(context, sem, url)) for url in
                              self.urls.copy()]
-                    dones, pendings = await asyncio.wait(tasks)
-                except  Exception as e:
-                    print(e)
+                    await asyncio.wait(tasks)
+                except Exception as e:
+                    logger.error(f"{e}")
             self.sd_start_log.append("爆破程序执行完毕")
 
-        if self.jietu:
-            self.document.save("弱口令报告.docx")
-            self.zd_start_log.append("生成弱口令报告.docx到当前文件夹")
-        # 这里读取批量文件
-
-    def blastingMode(self, mode: str):
+    # 这里读取批量文件
+    def blastingmode(self, mode: str):
         url = self.target_url.text()
         user = self.password_result_text_user.toPlainText().split('\n')
         password = self.password_result_text_pass.toPlainText().split('\n')
@@ -439,8 +395,8 @@ class Ui(object):
                         for ur in user:
                             self.urls.add((urls, ur, password[0]))
                     elif len(password) >= 2 and len(user) >= 2:
-                        self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-                        self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                        self.zd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
+                        self.sd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
                 else:
                     self.zd_start_log.append("暂时没有其他模式")
                     self.sd_start_log.append("暂时没有其他模式")
@@ -455,12 +411,12 @@ class Ui(object):
                     for ur in user:
                         self.urls.add((url, ur, password[0]))
                 elif len(password) >= 2 and len(user) >= 2:
-                    self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-                    self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
+                    self.zd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
+                    self.sd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
             elif mode == "ram:攻城锤":
                 if len(user) == 1 and len(password) == 1:
-                    self.zd_start_log.append('你还没有输入用户名或密码哦')
-                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    self.zd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
+                    self.sd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     payload = set(user + password)
@@ -468,42 +424,41 @@ class Ui(object):
                         self.urls.add((url, pay, pay))
             elif mode == "fork:草叉模式":
                 if len(user) <= 1 and len(password) <= 1:
-                    self.zd_start_log.append('你还没有输入用户名或密码哦')
-                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    self.zd_start_log.append('草叉模式，需要用户名和密码设置2个以上字符串')
+                    self.sd_start_log.append('草叉模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     for name, pay in zip(user, password):
                         self.urls.add((url, name, pay))
             elif mode == "bomb:集束炸弹":
                 if len(user) <= 1 and len(password) <= 1:
-                    self.zd_start_log.append('你还没有输入用户名或密码哦')
-                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    self.zd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
+                    self.sd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
                     return
                 elif len(user) <= 1 or len(password) <= 1:
-                    self.zd_start_log.append('你还没有输入用户名或密码哦')
-                    self.sd_start_log.append('你还没有输入用户名或密码哦')
+                    self.zd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
+                    self.sd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
                 else:
                     for name in user:
                         for pay in password:
                             self.urls.add((url, name, pay))
-            elif mode == "jietu:截图":
-                self.jietu = True
-                if len(user) == 1 and len(password) >= 2:
-                    '''这里用户名 1位 密码 大于1 '''
-                    for passwo in password:
-                        self.urls.add((url, user[0], passwo))
-                elif len(password) == 1 and len(user) >= 2:
-                    '''这里用户名 大于1位 密码 ==1 '''
-                    for ur in user:
-                        self.urls.add((url, ur, password[0]))
-                elif len(password) >= 2 and len(user) >= 2:
-                    self.zd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-                    self.sd_start_log.append('当前模式 用户名设置固定值 密码 设置多个值 或者相反')
-
         # 暂停，重启按钮
 
-    def waitingFor(self):
+    def waitingfor(self):
         self.log_clear()
+        taskss = asyncio.all_tasks()
+        for key in taskss:
+            if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
+                self.urls.add(tuple(eval(key.get_name())))
+                key.cancel()
+                continue
+            else:
+                key.cancel()
+        self.zd_start_log.append(f"暂停任务剩余{len(self.urls)}")
+        self.sd_start_log.append(f"暂停任务剩余{len(self.urls)}")
+
+    # 这里是限制node进行重启不清除响应
+    def nodewaitingfor(self):
         taskss = asyncio.all_tasks()
         for key in taskss:
             if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
@@ -524,17 +479,17 @@ class Ui(object):
                 self.zd_start_log.append("导出成功 保存内容到result.txt 文件夹")
                 self.sd_start_log.append("导出成功 保存内容到result.txt 文件夹")
         except Exception as e:
-            pass
+            logger.error(e)
 
-        ##按钮区域
+        # 按钮区域
 
-    def Clear_button_user(self):
+    def clear_button_user(self):
         self.password_result_text_user.clear()
 
-    def Clear_button_pass(self):
+    def clear_button_pass(self):
         self.password_result_text_pass.clear()
 
-    def Add_button(self):
+    def add_button(self):
         if self.add_text_add_user.text():
             self.password_result_text_user.append(self.add_text_add_user.text())
             self.add_text_add_user.clear()
@@ -542,27 +497,27 @@ class Ui(object):
             self.password_result_text_pass.append(self.add_text_add_pass.text())
             self.add_text_add_pass.clear()
 
-    def Paste_button_user(self):
-        ##创建剪切板对象
+    def paste_button_user(self):
+        # 创建剪切板对象
         clipboard = QApplication.clipboard()
         # 获取剪切板内容
         text = clipboard.text()
         self.password_result_text_user.append(text)
 
-    def Paste_button_pass(self):
-        ##创建剪切板对象
+    def paste_button_pass(self):
+        # 创建剪切板对象
         clipboard = QApplication.clipboard()
         # 获取剪切板内容
         text = clipboard.text()
         self.password_result_text_pass.append(text)
 
-    def Load_button_user(self):
+    def load_button_user(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
             text = Path(open_file_name[0]).read_text()
             self.password_result_text_user.append(text)
 
-    def Load_button_pass(self):
+    def load_button_pass(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
             text = Path(open_file_name[0]).read_text()
@@ -578,44 +533,40 @@ class Ui(object):
             self.sd_browser_button.setText('False')
             self.zd_browser_button.setText("False")
 
-    def log_clear(self):
-        self.zd_start_log.clear()
-        self.result_text.clear()
-        self.sd_start_log.clear()
-        self.urls.clear()
-        self.tasks.clear()
-
     def reget_start(self, loop):
+        logger.success("开启任务重启 node 进程次数初始化0")
+        self.node = 0
         if self.tabWidget_mode.currentIndex() == 0:
             try:
                 self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main(), loop=loop)
-            except  Exception as e:
+                asyncio.ensure_future(self.main(loop), loop=loop)
+            except Exception as e:
+                logger.error(str(e))
                 self.zd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 1:
             self.sd_start_log.append("手动请求模式启动！")
             try:
                 self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
                 asyncio.ensure_future(self.main_sd(), loop=loop)
-            except  Exception as e:
+            except Exception as e:
                 self.sd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 3:
-            print("cdp模式重新启动")
+            logger.success(f"cdp模式重新启动")
             try:
                 pass
-            except  Exception as e:
+            except Exception as e:
                 self.sd_start_log.append(str(e))
 
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.setFixedSize(1240, 908)
+    def setupui(self, mainwindow):
+        mainwindow.setObjectName("MainWindow")
+        mainwindow.setFixedSize(1240, 908)
         # 设置窗口居中
         screen = QGuiApplication.primaryScreen().size()
-        size = MainWindow.geometry()
-        MainWindow.move(int((screen.width() - size.width()) / 2),
+        size = mainwindow.geometry()
+        mainwindow.move(int((screen.width() - size.width()) / 2),
                         int((screen.height() - size.height()) / 2))
 
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
+        self.centralwidget = QtWidgets.QWidget(mainwindow)
         self.centralwidget.setObjectName("centralwidget")
         self.suspended_button = QtWidgets.QPushButton(self.centralwidget)
         self.suspended_button.setGeometry(QtCore.QRect(730, 2, 90, 40))
@@ -662,7 +613,7 @@ class Ui(object):
         self.zd_delay_text.setObjectName("zd_delay_text")
         self.zd_start_run_loglabel = QtWidgets.QLabel(self.BLASt_zd)
         self.zd_start_run_loglabel.setGeometry(QtCore.QRect(10, 240, 160, 40))
-        self.zd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.zd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.zd_start_run_loglabel.setObjectName("zd_start_run_loglabel")
         self.zd_start_log = QtWidgets.QTextBrowser(self.BLASt_zd)
         self.zd_start_log.setGeometry(QtCore.QRect(10, 290, 400, 100))
@@ -710,7 +661,7 @@ class Ui(object):
         self.sd_yzm_text.setObjectName("sd_yzm_text")
         self.sd_mode_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_mode_lable.setGeometry(QtCore.QRect(280, 20, 90, 20))
-        self.sd_mode_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_mode_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_mode_lable.setObjectName("sd_mode_lable")
         self.sd_mode_list = QtWidgets.QComboBox(self.BLAST_sd)
         self.sd_mode_list.setGeometry(QtCore.QRect(390, 20, 140, 20))
@@ -721,7 +672,7 @@ class Ui(object):
         self.sd_user_text.setObjectName("sd_user_text")
         self.sd_yzm_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_yzm_lable.setGeometry(QtCore.QRect(10, 180, 90, 20))
-        self.sd_yzm_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_yzm_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_yzm_lable.setObjectName("sd_yzm_lable")
         self.sd_pass_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_pass_text.setGeometry(QtCore.QRect(120, 140, 140, 20))
@@ -729,7 +680,7 @@ class Ui(object):
         self.sd_pass_text.setObjectName("sd_pass_text")
         self.sd_login_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_login_lable.setGeometry(QtCore.QRect(11, 220, 90, 20))
-        self.sd_login_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_login_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_login_lable.setObjectName("sd_login_lable")
         self.sd_yzm_text_path = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_yzm_text_path.setGeometry(QtCore.QRect(120, 180, 140, 20))
@@ -737,14 +688,14 @@ class Ui(object):
         self.sd_yzm_text_path.setObjectName("sd_yzm_text_path")
         self.sd_browser_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_browser_lable.setGeometry(QtCore.QRect(10, 20, 90, 20))
-        self.sd_browser_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.sd_browser_lable.setObjectName("sd_browser_lable")
+        # self.sd_browser_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.sd_browser_lable.setObjectName("sd_browser_liable")
         self.sd_browser_button = QtWidgets.QRadioButton(self.BLAST_sd)
         self.sd_browser_button.setGeometry(QtCore.QRect(120, 20, 140, 20))
         self.sd_browser_button.setObjectName("sd_browser_button")
         self.sd_sen_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_sen_lable.setGeometry(QtCore.QRect(10, 60, 90, 20))
-        self.sd_sen_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_sen_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_sen_lable.setObjectName("sd_sen_lable")
         self.sd_login_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_login_text.setGeometry(QtCore.QRect(120, 220, 140, 20))
@@ -752,7 +703,7 @@ class Ui(object):
         self.sd_login_text.setObjectName("sd_login_text")
         self.sd_name_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_name_lable.setGeometry(QtCore.QRect(10, 100, 90, 20))
-        self.sd_name_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_name_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_name_lable.setObjectName("sd_name_lable")
         self.sd_sem_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_sem_text.setGeometry(QtCore.QRect(120, 60, 140, 20))
@@ -760,7 +711,7 @@ class Ui(object):
         self.sd_sem_text.setObjectName("sd_sem_text")
         self.sd_pass_lab = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_pass_lab.setGeometry(QtCore.QRect(10, 140, 90, 20))
-        self.sd_pass_lab.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_pass_lab.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_pass_lab.setObjectName("sd_pass_lab")
         self.sd_proxy_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_proxy_text.setGeometry(QtCore.QRect(390, 60, 140, 20))
@@ -768,7 +719,7 @@ class Ui(object):
         self.sd_proxy_text.setObjectName("sd_proxy_text")
         self.sd_proxy_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_proxy_lable.setGeometry(QtCore.QRect(280, 60, 90, 20))
-        self.sd_proxy_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_proxy_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_proxy_lable.setObjectName("sd_proxy_lable")
         self.sd_delay_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_delay_text.setGeometry(QtCore.QRect(390, 100, 140, 20))
@@ -776,11 +727,11 @@ class Ui(object):
         self.sd_delay_text.setObjectName("sd_delay_text")
         self.sd_delay_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_delay_lable.setGeometry(QtCore.QRect(280, 100, 90, 20))
-        self.sd_delay_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_delay_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_delay_lable.setObjectName("sd_delay_lable")
         self.sd_start_run_loglabel = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_start_run_loglabel.setGeometry(QtCore.QRect(10, 250, 160, 40))
-        self.sd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.sd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_start_run_loglabel.setObjectName("sd_start_run_loglabel")
         self.tabWidget_mode.addTab(self.BLAST_sd, "")
         self.BLAST_cdp = QtWidgets.QWidget()
@@ -833,23 +784,20 @@ class Ui(object):
 
         self.announcement.setReadOnly(True)
         self.announcement.setObjectName("announcement")
-        self.target_url = MLineEdit('', MainWindow)
+        self.target_url = MLineEdit('', mainwindow)
         self.target_url.setGeometry(QtCore.QRect(10, 10, 561, 31))
         #
         self.target_url.setAcceptDrops(True)
         self.target_url.setFrame(False)
         self.target_url.setCursorPosition(26)
-        self.target_url.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeading | QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.target_url.setPlaceholderText("")
-        self.target_url.setCursorMoveStyle(QtCore.Qt.CursorMoveStyle.LogicalMoveStyle)
+        # self.target_url.setCursorMoveStyle(QtCore.Qt.CursorMoveStyle.LogicalMoveStyle)
         self.target_url.setObjectName("target_url")
         self.tabWidget_user_passwd = QtWidgets.QTabWidget(self.centralwidget)
         self.tabWidget_user_passwd.setGeometry(QtCore.QRect(680, 50, 560, 270))
-
         self.tabWidget_user_passwd.setObjectName("tabWidget_user_passwd")
         self.tab_user = QtWidgets.QWidget()
-        self.tab_user.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.PreventContextMenu)
+        # self.tab_user.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.PreventContextMenu)
         self.tab_user.setObjectName("tab_user")
         self.Load_file_button_user = QtWidgets.QPushButton(self.tab_user)
         self.Load_file_button_user.setGeometry(QtCore.QRect(10, 70, 80, 30))
@@ -907,15 +855,14 @@ class Ui(object):
         self.cdp_mode_listpass.setGeometry(QtCore.QRect(120, 200, 320, 30))
         self.cdp_mode_listpass.setObjectName("cdp_mode_listpass")
         self.tabWidget_user_passwd.addTab(self.tab_pass, "")
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.retranslateUi(MainWindow)
-        self.tabWidget_mode.setCurrentIndex(2)
+        mainwindow.setCentralWidget(self.centralwidget)
+        self.retranslateui(mainwindow)
         self.tabWidget_user_passwd.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        QtCore.QMetaObject.connectSlotsByName(mainwindow)
 
-    def retranslateUi(self, MainWindow):
+    def retranslateui(self, mainwindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("window", "BLAST v3.1 by CVES实验室"))
+        mainwindow.setWindowTitle(_translate("window", "BLAST v3.1.2 by CVES实验室"))
         self.suspended_button.setText(_translate("MainWindow", "暂停爆破"))
         self.export_button.setText(_translate("MainWindow", "导出数据"))
         self.restart_button.setText(_translate("MainWindow", "重启爆破"))
@@ -923,7 +870,6 @@ class Ui(object):
         self.zd_mode_list.addItem(_translate("MainWindow", "ram:攻城锤"))
         self.zd_mode_list.addItem(_translate("MainWindow", "fork:草叉模式"))
         self.zd_mode_list.addItem(_translate("MainWindow", "bomb:集束炸弹"))
-        self.zd_mode_list.addItem(_translate("MainWindow", "jietu:截图"))
         self.zd_lable_mode.setText(_translate("MainWindow", "爆破模式"))
         self.zd_browser_label.setText(_translate("MainWindow", "浏览器"))
         self.zd_delay_lable.setText(_translate("MainWindow", "延迟关闭"))
@@ -944,7 +890,6 @@ class Ui(object):
         self.sd_mode_list.addItem(_translate("MainWindow", "ram:攻城锤"))
         self.sd_mode_list.addItem(_translate("MainWindow", "fork:草叉模式"))
         self.sd_mode_list.addItem(_translate("MainWindow", "bomb:集束炸弹"))
-        self.sd_mode_list.addItem(_translate("MainWindow", "jietu:截图"))
 
         self.sd_user_text.setText(_translate("MainWindow", "xpath"))
         self.sd_yzm_lable.setText(_translate("MainWindow", "验证码"))
@@ -1004,42 +949,45 @@ class Ui(object):
                                               _translate("MainWindow", "密码"))
 
         self.announcement.setText(
-            "本工具仅能在取得足够合法授权的企业安全建设中使用，在使用本工具过程中，您应确保自己所有行为符合当地的法律法规。 如您在使用本工具的过程中存在任何非法行为，您将自行承担所有后果，本工具所有开发者和所有贡献者不承担任何法律及连带责任。 除非您已充分阅读、完全理解并接受本协议所有条款，否则，请您不要安装并使用本工具。 您的使用行为或者您以其他任何明示或者默示方式表示接受本协议的，即视为您已阅读并同意本协议的约束。")
+            "本工具仅能在取得足够合法授权的企业安全建设中使用，在使用本工具过程中，您应确保自己所有行为符合当地的法律法规。 "
+            "如您在使用本工具的过程中存在任何非法行为，您将自行承担所有后果，本工具所有开发者和所有贡献者不承担任何法律及连带责任。 "
+            "除非您已充分阅读、完全理解并接受本协议所有条款，否则，请您不要安装并使用本工具。 您的使用行为或者您以其他任何明示或者默示方式表示接受本协议的，"
+            "即视为您已阅读并同意本协议的约束。")
 
     # 按钮调用函数
     def get_start(self, loop):
         self.log_clear()
+        tasks = asyncio.all_tasks()
+        for key in tasks:
+            key.cancel()
         if self.tabWidget_mode.currentIndex() == 0:
             logger.success("启动自动爆破模式 ")
-            taskss = asyncio.all_tasks()
-            logger.info(f"当前存在多少异步循环 {len(taskss)}")
-            for key in taskss:
-                key.cancel()
             try:
                 mode = self.zd_mode_list.currentText()
-                self.blastingMode(mode)
+                self.blastingmode(mode)
                 self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                start = asyncio.ensure_future(self.main(),loop=loop)
+                start = asyncio.ensure_future(self.main(loop), loop=loop)
                 background_tasks.add(start)
                 start.add_done_callback(lambda t: background_tasks.remove(t))
-            except  Exception as e:
+            except Exception as e:
+                logger.error(str(e))
                 self.zd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 1:
             logger.success("启动手动爆破模式 ")
             mode = self.sd_mode_list.currentText()
-            self.blastingMode(mode)
+            self.blastingmode(mode)
             self.sd_start_log.append("手动请求模式启动！")
             try:
                 self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                start=asyncio.ensure_future(self.main_sd(), loop=loop)
+                start = asyncio.ensure_future(self.main_sd(), loop=loop)
                 background_tasks.add(start)
                 start.add_done_callback(lambda t: background_tasks.remove(t))
-            except  Exception as e:
+            except Exception as e:
                 self.sd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 2:
             logger.success("启动cdp 断点爆破模式")
             mode = self.cdp_mode_list.currentText()
-            datalist, canshu = self.blastingMode_cdp(mode)
+            datalist, canshu = self.blastingmode_cdp(mode)
             self.http.update_date.connect(self.resultlogapp)
             self.http.datalist = datalist
             self.http.canshu = canshu
@@ -1047,47 +995,47 @@ class Ui(object):
             self.http.sem = asyncio.Semaphore(int(self.cdp_sem.text()))
             try:
                 asyncio.ensure_future(self.http.rundatalist(), loop=loop)
-            except  Exception as e:
-                print("这里出现错误了", e)
+            except Exception as e:
+                logger.error(f"{e}")
 
     # 添加用户名或者密码字典函数
-    def Add_buttondictionary_user(self):
+    def add_buttondictionary_user(self):
         if self.cdp_mode_list_user.currentText() == "用户字典":
             return
         datalist = returndictionary(self.cdp_mode_list_user.currentText())
         for key in datalist:
             self.password_result_text_user.append(str(key))
 
-    def Add_buttondictionary_pass(self):
+    def add_buttondictionary_pass(self):
         if self.cdp_mode_listpass.currentText() == "密码字典":
             return
         datalist = returndictionary(self.cdp_mode_listpass.currentText())
         for key in datalist:
             self.password_result_text_pass.append(str(key))
 
-    def ui_set(self, MainWindow, loop):
-        self.setupUi(MainWindow)
+    def ui_set(self, mainwindow, loop):
+        self.setupui(mainwindow)
         self.start_button.clicked.connect(lambda: self.get_start(loop))
         # # 暂停，重启按钮
         self.restart_button.clicked.connect(lambda: self.reget_start(loop))
-        self.suspended_button.clicked.connect(lambda: self.waitingFor())
+        self.suspended_button.clicked.connect(lambda: self.waitingfor())
 
         # 导出按钮
         self.export_button.clicked.connect(lambda: self.export_log())
-        ##button 按钮
+        # button 按钮
         self.zd_browser_button.clicked.connect(lambda: self.get_head())
         self.sd_browser_button.clicked.connect(lambda: self.get_head())
-        ##用户名 设置
+        # 用户名 设置
 
-        self.Paste_text_button_user.clicked.connect(lambda: self.Paste_button_user())
-        self.add_text_button_user.clicked.connect(lambda: self.Add_button())
-        self.Clear_list_button_user.clicked.connect(lambda: self.Clear_button_user())
-        self.Load_file_button_user.clicked.connect(lambda: self.Load_button_user())
-        ##密码设置
-        self.Paste_text_button_pass.clicked.connect(lambda: self.Paste_button_pass())
-        self.add_text_button_pass.clicked.connect(lambda: self.Add_button())
-        self.Clear_list_button_pass.clicked.connect(lambda: self.Clear_button_pass())
-        self.Load_file_button_pass.clicked.connect(lambda: self.Load_button_pass())
+        self.Paste_text_button_user.clicked.connect(lambda: self.paste_button_user())
+        self.add_text_button_user.clicked.connect(lambda: self.add_button())
+        self.Clear_list_button_user.clicked.connect(lambda: self.clear_button_user())
+        self.Load_file_button_user.clicked.connect(lambda: self.load_button_user())
+        # 密码设置
+        self.Paste_text_button_pass.clicked.connect(lambda: self.paste_button_pass())
+        self.add_text_button_pass.clicked.connect(lambda: self.add_button())
+        self.Clear_list_button_pass.clicked.connect(lambda: self.clear_button_pass())
+        self.Load_file_button_pass.clicked.connect(lambda: self.load_button_pass())
 
         # cdp 模块
         self.cdp_start.clicked.connect(lambda: self.start_cdp_button(loop))
@@ -1097,8 +1045,8 @@ class Ui(object):
         self.cdp_Add_code.clicked.connect(lambda: self.cdp_mark_selected_text_jscode())
 
         # 添加字典
-        self.cdp_mode_list_user.currentIndexChanged.connect(lambda: self.Add_buttondictionary_user())
-        self.cdp_mode_listpass.currentIndexChanged.connect(lambda: self.Add_buttondictionary_pass())
+        self.cdp_mode_list_user.currentIndexChanged.connect(lambda: self.add_buttondictionary_user())
+        self.cdp_mode_listpass.currentIndexChanged.connect(lambda: self.add_buttondictionary_pass())
 
 
 settings = Ui()
