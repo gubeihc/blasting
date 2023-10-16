@@ -216,6 +216,7 @@ class Ui(object):
         if self.node >= 300:
             self.nodewaitingfor()
             self.reget_start(loop)
+            logger.success("node 进程次数大于300，重启node进程{}".format(fut))
 
     async def main(self, loop):
         try:
@@ -249,7 +250,6 @@ class Ui(object):
                 self.zd_start_log.append("爆破程序执行完毕")
                 await browse.close()
         except Exception as e:
-            await browse.close()
             logger.error(f"main 启动遇到问题咯 {e}")
 
     def start_cdp_button(self, loop):
@@ -491,10 +491,10 @@ class Ui(object):
 
     def add_button(self):
         if self.add_text_add_user.text():
-            self.password_result_text_user.append(self.add_text_add_user.text())
+            self.password_result_text_user.appendPlainText(self.add_text_add_user.text())
             self.add_text_add_user.clear()
         elif self.add_text_add_pass.text():
-            self.password_result_text_pass.append(self.add_text_add_pass.text())
+            self.password_result_text_pass.appendPlainText(self.add_text_add_pass.text())
             self.add_text_add_pass.clear()
 
     def paste_button_user(self):
@@ -502,26 +502,26 @@ class Ui(object):
         clipboard = QApplication.clipboard()
         # 获取剪切板内容
         text = clipboard.text()
-        self.password_result_text_user.append(text)
+        self.password_result_text_user.appendPlainText(text)
 
     def paste_button_pass(self):
         # 创建剪切板对象
         clipboard = QApplication.clipboard()
         # 获取剪切板内容
         text = clipboard.text()
-        self.password_result_text_pass.append(text)
+        self.password_result_text_pass.appendPlainText(text)
 
     def load_button_user(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
             text = Path(open_file_name[0]).read_text()
-            self.password_result_text_user.append(text)
+            self.password_result_text_user.appendPlainText(text)
 
     def load_button_pass(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
             text = Path(open_file_name[0]).read_text()
-            self.password_result_text_pass.append(text)
+            self.password_result_text_pass.appendPlainText(text)
 
     def get_head(self):
         if self.sd_browser_button.text() == 'False' or self.zd_browser_button.text() == "False":
@@ -613,7 +613,6 @@ class Ui(object):
         self.zd_delay_text.setObjectName("zd_delay_text")
         self.zd_start_run_loglabel = QtWidgets.QLabel(self.BLASt_zd)
         self.zd_start_run_loglabel.setGeometry(QtCore.QRect(10, 240, 160, 40))
-        # self.zd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.zd_start_run_loglabel.setObjectName("zd_start_run_loglabel")
         self.zd_start_log = QtWidgets.QTextBrowser(self.BLASt_zd)
         self.zd_start_log.setGeometry(QtCore.QRect(10, 290, 400, 100))
@@ -661,7 +660,6 @@ class Ui(object):
         self.sd_yzm_text.setObjectName("sd_yzm_text")
         self.sd_mode_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_mode_lable.setGeometry(QtCore.QRect(280, 20, 90, 20))
-        # self.sd_mode_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_mode_lable.setObjectName("sd_mode_lable")
         self.sd_mode_list = QtWidgets.QComboBox(self.BLAST_sd)
         self.sd_mode_list.setGeometry(QtCore.QRect(390, 20, 140, 20))
@@ -672,7 +670,6 @@ class Ui(object):
         self.sd_user_text.setObjectName("sd_user_text")
         self.sd_yzm_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_yzm_lable.setGeometry(QtCore.QRect(10, 180, 90, 20))
-        # self.sd_yzm_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_yzm_lable.setObjectName("sd_yzm_lable")
         self.sd_pass_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_pass_text.setGeometry(QtCore.QRect(120, 140, 140, 20))
@@ -680,7 +677,6 @@ class Ui(object):
         self.sd_pass_text.setObjectName("sd_pass_text")
         self.sd_login_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_login_lable.setGeometry(QtCore.QRect(11, 220, 90, 20))
-        # self.sd_login_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_login_lable.setObjectName("sd_login_lable")
         self.sd_yzm_text_path = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_yzm_text_path.setGeometry(QtCore.QRect(120, 180, 140, 20))
@@ -688,14 +684,12 @@ class Ui(object):
         self.sd_yzm_text_path.setObjectName("sd_yzm_text_path")
         self.sd_browser_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_browser_lable.setGeometry(QtCore.QRect(10, 20, 90, 20))
-        # self.sd_browser_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_browser_lable.setObjectName("sd_browser_liable")
         self.sd_browser_button = QtWidgets.QRadioButton(self.BLAST_sd)
         self.sd_browser_button.setGeometry(QtCore.QRect(120, 20, 140, 20))
         self.sd_browser_button.setObjectName("sd_browser_button")
         self.sd_sen_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_sen_lable.setGeometry(QtCore.QRect(10, 60, 90, 20))
-        # self.sd_sen_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_sen_lable.setObjectName("sd_sen_lable")
         self.sd_login_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_login_text.setGeometry(QtCore.QRect(120, 220, 140, 20))
@@ -703,7 +697,6 @@ class Ui(object):
         self.sd_login_text.setObjectName("sd_login_text")
         self.sd_name_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_name_lable.setGeometry(QtCore.QRect(10, 100, 90, 20))
-        # self.sd_name_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_name_lable.setObjectName("sd_name_lable")
         self.sd_sem_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_sem_text.setGeometry(QtCore.QRect(120, 60, 140, 20))
@@ -711,7 +704,6 @@ class Ui(object):
         self.sd_sem_text.setObjectName("sd_sem_text")
         self.sd_pass_lab = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_pass_lab.setGeometry(QtCore.QRect(10, 140, 90, 20))
-        # self.sd_pass_lab.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_pass_lab.setObjectName("sd_pass_lab")
         self.sd_proxy_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_proxy_text.setGeometry(QtCore.QRect(390, 60, 140, 20))
@@ -719,7 +711,6 @@ class Ui(object):
         self.sd_proxy_text.setObjectName("sd_proxy_text")
         self.sd_proxy_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_proxy_lable.setGeometry(QtCore.QRect(280, 60, 90, 20))
-        # self.sd_proxy_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_proxy_lable.setObjectName("sd_proxy_lable")
         self.sd_delay_text = QtWidgets.QLineEdit(self.BLAST_sd)
         self.sd_delay_text.setGeometry(QtCore.QRect(390, 100, 140, 20))
@@ -727,11 +718,9 @@ class Ui(object):
         self.sd_delay_text.setObjectName("sd_delay_text")
         self.sd_delay_lable = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_delay_lable.setGeometry(QtCore.QRect(280, 100, 90, 20))
-        # self.sd_delay_lable.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_delay_lable.setObjectName("sd_delay_lable")
         self.sd_start_run_loglabel = QtWidgets.QLabel(self.BLAST_sd)
         self.sd_start_run_loglabel.setGeometry(QtCore.QRect(10, 250, 160, 40))
-        # self.sd_start_run_loglabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.sd_start_run_loglabel.setObjectName("sd_start_run_loglabel")
         self.tabWidget_mode.addTab(self.BLAST_sd, "")
         self.BLAST_cdp = QtWidgets.QWidget()
@@ -791,13 +780,11 @@ class Ui(object):
         self.target_url.setFrame(False)
         self.target_url.setCursorPosition(26)
         self.target_url.setPlaceholderText("")
-        # self.target_url.setCursorMoveStyle(QtCore.Qt.CursorMoveStyle.LogicalMoveStyle)
         self.target_url.setObjectName("target_url")
         self.tabWidget_user_passwd = QtWidgets.QTabWidget(self.centralwidget)
         self.tabWidget_user_passwd.setGeometry(QtCore.QRect(680, 50, 560, 270))
         self.tabWidget_user_passwd.setObjectName("tabWidget_user_passwd")
         self.tab_user = QtWidgets.QWidget()
-        # self.tab_user.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.PreventContextMenu)
         self.tab_user.setObjectName("tab_user")
         self.Load_file_button_user = QtWidgets.QPushButton(self.tab_user)
         self.Load_file_button_user.setGeometry(QtCore.QRect(10, 70, 80, 30))
@@ -807,7 +794,9 @@ class Ui(object):
         self.Clear_list_button_user.setGeometry(QtCore.QRect(10, 120, 80, 30))
 
         self.Clear_list_button_user.setObjectName("Clear_list_button_user")
-        self.password_result_text_user = QtWidgets.QTextBrowser(self.tab_user)
+        # self.password_result_text_user = QtWidgets.QTextBrowser(self.tab_user)
+        self.password_result_text_user = QtWidgets.QPlainTextEdit(self.tab_user)
+        self.password_result_text_user.setUndoRedoEnabled(False)
         self.password_result_text_user.setGeometry(QtCore.QRect(120, 10, 320, 160))
         self.password_result_text_user.setObjectName("password_result_text_user")
         self.Paste_text_button_user = QtWidgets.QPushButton(self.tab_user)
@@ -845,7 +834,7 @@ class Ui(object):
         self.add_text_button_pass.setGeometry(QtCore.QRect(10, 170, 80, 30))
 
         self.add_text_button_pass.setObjectName("add_text_button_pass")
-        self.password_result_text_pass = QtWidgets.QTextBrowser(self.tab_pass)
+        self.password_result_text_pass = QtWidgets.QPlainTextEdit(self.tab_pass)
         self.password_result_text_pass.setGeometry(QtCore.QRect(120, 10, 320, 160))
         self.password_result_text_pass.setObjectName("password_result_text_pass")
         self.add_text_add_pass = QtWidgets.QLineEdit(self.tab_pass)
@@ -1004,14 +993,14 @@ class Ui(object):
             return
         datalist = returndictionary(self.cdp_mode_list_user.currentText())
         for key in datalist:
-            self.password_result_text_user.append(str(key))
+            self.password_result_text_user.appendPlainText(str(key))
 
     def add_buttondictionary_pass(self):
         if self.cdp_mode_listpass.currentText() == "密码字典":
             return
         datalist = returndictionary(self.cdp_mode_listpass.currentText())
         for key in datalist:
-            self.password_result_text_pass.append(str(key))
+            self.password_result_text_pass.appendPlainText(str(key))
 
     def ui_set(self, mainwindow, loop):
         self.setupui(mainwindow)
