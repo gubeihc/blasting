@@ -101,7 +101,7 @@ return urls;
 
 async def performjs_yzm_code(page_two, passwd, user, code):
     return await page_two.evaluate('''()=>{
-                                                const urls = [];
+const urls = [];
 let username = '';
 let password = '';
 
@@ -134,6 +134,7 @@ for (let i = 0; i < forms.length; i++) {
                                  if (urls.length === 0) {
   const buttonForm = document.getElementsByTagName('button');
   if (buttonForm.length > 0) {
+        urls.push('isok');
     buttonForm[0].click();
     console.log('js input 输入没找到button 通过 ');
   }

@@ -64,7 +64,6 @@ class Ui(object):
                     if (self.zd_yzm_text.text() in await response.text()
                             or self.sd_yzm_text.text() in await response.text()):
                         logger.debug(f"{self.zd_yzm_text.text()} html 内容")
-
                     await self.addyzm_list()
                 except Exception as e:
                     logger.debug(f"获取验证码错误值进行匹配 {e}")
@@ -75,6 +74,7 @@ class Ui(object):
         self.sd_start_log.clear()
         self.urls.clear()
         self.tasks.clear()
+        self.announcement.clear()
 
     async def urls_is_os(self, urls, page_two, setlist, user, passwd):
         if len(urls) != 0:
@@ -88,9 +88,7 @@ class Ui(object):
                     await page_two.content()):
                 await self.addyzm_list()
                 await page_two.close()
-
                 self.node = self.node + 1
-
             else:
                 timeouts = int(self.zd_delay_text.text()) * 1000
                 await page_two.wait_for_timeout(timeouts)
@@ -105,7 +103,6 @@ class Ui(object):
             await page_two.context.clear_cookies()
             await page_two.close()
             self.node = self.node + 1
-
             self.urls.discard(setlist)
             self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
 
@@ -145,6 +142,7 @@ class Ui(object):
                     await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
             except Exception as e:
                 logger.error(f"函数执行异常 {e}")
+                self.announcement.append(f"函数执行异常 {e}")
                 self.urls.discard(setlist)
                 self.zd_start_log.append("队列还剩{}".format(len(self.urls)))
                 self.sd_start_log.append('请求失败{}'.format(setlist))
@@ -200,6 +198,7 @@ class Ui(object):
                     await page_two.close()
             except Exception as e:
                 logger.debug(e)
+                self.announcement.append(f"函数执行异常 {e}")
                 self.urls.discard(setlist)
                 self.sd_start_log.append('{}请求失败'.format(setlist))
                 self.sd_start_log.append("队列剩余{}".format(len(self.urls)))
@@ -768,7 +767,7 @@ class Ui(object):
 
         self.start_button.setObjectName("start_button")
         self.announcement = QtWidgets.QTextBrowser(self.centralwidget)
-        self.announcement.setEnabled(False)
+        # self.announcement.setEnabled(False)
         self.announcement.setGeometry(QtCore.QRect(680, 350, 560, 131))
 
         self.announcement.setReadOnly(True)
@@ -936,12 +935,6 @@ class Ui(object):
         self.cdp_mode_listpass.addItem(_translate("MainWindow", "密码数字_1-100"))
         self.tabWidget_user_passwd.setTabText(self.tabWidget_user_passwd.indexOf(self.tab_pass),
                                               _translate("MainWindow", "密码"))
-
-        self.announcement.setText(
-            "本工具仅能在取得足够合法授权的企业安全建设中使用，在使用本工具过程中，您应确保自己所有行为符合当地的法律法规。 "
-            "如您在使用本工具的过程中存在任何非法行为，您将自行承担所有后果，本工具所有开发者和所有贡献者不承担任何法律及连带责任。 "
-            "除非您已充分阅读、完全理解并接受本协议所有条款，否则，请您不要安装并使用本工具。 您的使用行为或者您以其他任何明示或者默示方式表示接受本协议的，"
-            "即视为您已阅读并同意本协议的约束。")
 
     # 按钮调用函数
     def get_start(self, loop):
