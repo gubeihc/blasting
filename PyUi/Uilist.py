@@ -191,6 +191,11 @@ class Ui(object):
                     code = self.ocr.classification(base64.b64decode(data))
                     await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code, loginpath)
                     await page_two.wait_for_timeout(1000)
+                    result = (f'title:{await page_two.title()} {page_two.url}'
+                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
+                    self.result_text.append(str(' {}'.format(result)))
+                    self.urls.discard(setlist)
+                    self.sd_start_log.append("请求队列还剩{}".format(len(self.urls)))
                     self.POSTdata['username'] = user
                     self.POSTdata['password'] = passwd
                     timeouts = int(self.sd_delay_text.text()) * 1000
@@ -351,7 +356,7 @@ class Ui(object):
     def resultlogapp(self, data):
         self.result_text.append(data)
 
-    async def main_sd(self):
+    async def main_sd(self, loop):
         async with async_playwright() as asp:
             proxy = self.sd_proxy_text.text() if str(self.sd_proxy_text.text()).startswith(
                 ("http://", "https://")) else None
@@ -371,11 +376,14 @@ class Ui(object):
             sem = asyncio.Semaphore(int(self.sd_sem_text.text()))
             while len(self.urls) > 0:
                 try:
-                    tasks = [asyncio.ensure_future(self.get_url_request_sd(context, sem, url)) for url in
-                             self.urls.copy()]
-                    await asyncio.wait(tasks)
+                    for url in self.urls.copy():
+                        task = asyncio.create_task(self.get_url_request_sd(context, sem, url))
+                        task.set_name(url)
+                        task.add_done_callback(partial(self.testnode, loop=loop))
+                        self.tasks.append(task)
+                    await asyncio.wait(self.tasks)
                 except Exception as e:
-                    logger.error(f"{e}")
+                    logger.error(e)
             self.sd_start_log.append("爆破程序执行完毕")
 
     # 这里读取批量文件
@@ -546,7 +554,7 @@ class Ui(object):
             self.sd_start_log.append("手动请求模式启动！")
             try:
                 self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main_sd(), loop=loop)
+                asyncio.ensure_future(self.main_sd(loop), loop=loop)
             except Exception as e:
                 self.sd_start_log.append(str(e))
         elif self.tabWidget_mode.currentIndex() == 3:
@@ -961,7 +969,7 @@ class Ui(object):
             self.sd_start_log.append("手动请求模式启动！")
             try:
                 self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                start = asyncio.ensure_future(self.main_sd(), loop=loop)
+                start = asyncio.ensure_future(self.main_sd(loop), loop=loop)
                 background_tasks.add(start)
                 start.add_done_callback(lambda t: background_tasks.remove(t))
             except Exception as e:

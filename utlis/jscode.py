@@ -6,11 +6,11 @@ from PyQt6.QtCore import pyqtSignal, QObject
 
 
 async def js_images_time(page_two):
-    '''
+    """
     触发网站img标签下 验证码的点击事件，确保jpg等图片后面跟上 时间戳，并对每一个图片设置跨域防止请求错误。
     :param page_two: 浏览器界面
     :return:
-    '''
+   """
     return await page_two.evaluate(
         '''()=>{
 const images = document.getElementsByTagName('img');
@@ -147,7 +147,7 @@ return urls;
 async def jsrequest(page_two, namepath, passpath, user, passwd, loginpath):
     return await page_two.evaluate('''()=>{
 
-                             function x(xpath) {
+    function x(xpath) {
        var result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
        return result.iterateNext()
      };
@@ -171,7 +171,7 @@ async def jsrequest(page_two, namepath, passpath, user, passwd, loginpath):
 async def jsrequest_code(page_two, namepath, passpath, codepath, user, passwd, code, loginpath):
     return await page_two.evaluate('''()=>{
 
-                                 function x(xpath) {
+            function x(xpath) {
            var result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
            return result.iterateNext()
          }

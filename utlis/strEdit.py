@@ -17,12 +17,12 @@ class MLineEdit(QtWidgets.QLineEdit):
             e.ignore()
 
     def dropEvent(self, e):
-        filePathList = e.mimeData().text()
-        filePath = filePathList.split('\n')[0]  # 拖拽多文件只取第一个地址
+        filepathlist = e.mimeData().text()
+        filepath = filepathlist.split('\n')[0]  # 拖拽多文件只取第一个地址
         if platform.system() == "Windows":
-            filePath = filePath.replace('file:///', '')
-        filePath = filePath.replace('file://', '', 1)  # 去除文件地址前缀的特定字符
-        self.setText(filePath)
+            filepath = filepath.replace('file:///', '')
+        filepath = filepath.replace('file://', '', 1)  # 去除文件地址前缀的特定字符
+        self.setText(filepath)
 
 
 def readfile_scan(name):
@@ -53,15 +53,15 @@ def execute_cdp(conn: websocket, command: dict):
     return json.loads(conn.recv())
 
 
-def cdpencode(callFrameId, expression):
+def cdpencode(call, express):
     conn = websocket_conn()
     # js = "console.log('hello world')" # 控制台打印 hello world
     command = {
         'method': 'Debugger.evaluateOnCallFrame',  # 处理 传进去的 expression
         'id': int(),  # id需要传一个整型，否则会报错
         'params': {
-            'callFrameId': callFrameId,
-            'expression': expression,
+            'callFrameId': call,
+            'expression': express,
             'objectGroup': 'console',
             'includeCommandLineAPI': True,
         }

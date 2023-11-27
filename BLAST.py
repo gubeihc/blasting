@@ -11,8 +11,8 @@ from PyUi.Uilist import settings
 
 class Ui_MainWindow(object):
 
-    def setText_ui(self, MainWindow):
-        self.ui = settings.ui_set(MainWindow, loop)
+    def setText_ui(self, windows):
+        self.ui = settings.ui_set(windows, loop)
 
 
 if __name__ == '__main__':
