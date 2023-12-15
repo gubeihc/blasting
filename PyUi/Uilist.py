@@ -130,7 +130,7 @@ class Ui(object):
                     await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
                 else:
                     logger.info("当前请求发现验证码，进行验证码识别爆破")
-                    yzm = yzm[0].replace('..', '')
+                    yzm = yzm[0].replace('..', '').replace("//","/")
                     logger.info(f"当前请求发现存在验证码 使用用户 {user} 使用密码 {passwd}  验证码 {yzm}")
                     img_url = await performjs_code(page_two_zd, yzm)
                     data = img_url.split(",")[1]
