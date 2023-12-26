@@ -6,3 +6,7 @@ PyUi/__pycache__/Uilist.cpython-39.pyc
 utlis/__pycache__/__init__.cpython-39.pyc
 utlis/__pycache__/jscode.cpython-39.pyc
 utlis/__pycache__/strEdit.cpython-39.pyc
+*.iml
+*.xml
+utlis/__pycache__/tools.cpython-39.pyc
+*.pyc
