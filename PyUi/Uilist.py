@@ -185,7 +185,7 @@ class Ui(object):
                     await page_two.wait_for_timeout(timeouts)
                     await page_two.close()
                 else:
-                    yzm = yzm[0].replace('..', '')
+                    yzm = yzm[0].replace('..', '').replace("//","/")
                     img_url = await performjs_code(page_two, yzm)
                     data = img_url.split(",")[1]
                     code = self.ocr.classification(base64.b64decode(data))
