@@ -521,13 +521,13 @@ class Ui(object):
     def load_button_user(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
-            text = Path(open_file_name[0]).read_text()
+            text = Path(open_file_name[0]).read_text(encoding="utf-8",errors='ignore')
             self.password_result_text_user.appendPlainText(text)
 
     def load_button_pass(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
-            text = Path(open_file_name[0]).read_text()
+            text = Path(open_file_name[0]).read_text(encoding="utf-8",errors='ignore')
             self.password_result_text_pass.appendPlainText(text)
 
     def get_head(self):
