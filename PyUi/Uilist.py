@@ -5,7 +5,6 @@ import asyncio
 from playwright.async_api import async_playwright, Error
 from lxml import etree
 from ddddocr import DdddOcr
-import base64
 from pathlib import Path
 import re
 from PyQt6 import QtCore, QtWidgets
@@ -19,8 +18,12 @@ from utlis.strEdit import readfile_scan
 from utlis.jscode import httpRaw, performjs, performjs_code, performjs_yzm_code, jsrequest, jsrequest_code, \
     js_images_time
 from utlis.tools import returndictionary
+from utlis.tools import decode_base64
 
 background_tasks = set()
+
+logger.add("run.log", rotation="10 MB", retention="10 days", level="INFO", enqueue=True)
+logger.add("error.log", rotation="10 MB", retention="10 days", level="ERROR", enqueue=True)
 
 
 class Ui(object):
@@ -81,7 +84,7 @@ class Ui(object):
             result = (f'title:{await page_two.title()} {page_two.url}  '
                       f'长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
             logger.info(
-                f"通过js提交  title:{await page_two.title()}  {page_two.url} "
+                f"title:{await page_two.title()}  {page_two.url} "
                 f"长度:{len(await page_two.content())} 账户 {user} 密码 {passwd} ")
             self.result_text.append(str(' {}'.format(result)))
             if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
@@ -129,12 +132,13 @@ class Ui(object):
                     await page_two_zd.wait_for_timeout(1000)
                     await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
                 else:
-                    logger.info("当前请求发现验证码，进行验证码识别爆破")
-                    yzm = yzm[0].replace('..', '').replace("//","/")
-                    logger.info(f"当前请求发现存在验证码 使用用户 {user} 使用密码 {passwd}  验证码 {yzm}")
-                    img_url = await performjs_code(page_two_zd, yzm)
-                    data = img_url.split(",")[1]
-                    code = self.ocr.classification(base64.b64decode(data))
+                    yzm = yzm[0].replace('..', '').replace("//", "/")
+                    data = yzm.split(",")[1] if yzm.startswith("data:image") else \
+                        (await performjs_code(page_two_zd, yzm)).split(",")[1]
+                    code = self.ocr.classification(decode_base64(data))
+                    logger.info(
+                        f"当前请求发现存在验证码 使用用户 {user} 使用密码 {passwd}  验证码 {code} 验证码链接{yzm}")
+
                     urls = await performjs_yzm_code(page_two_zd, passwd, user, code)
                     await page_two_zd.wait_for_timeout(1000)
                     self.POSTdata['username'] = user
@@ -166,7 +170,6 @@ class Ui(object):
                 page_two.on('response', self.on_response)
                 await page_two.goto(url)
                 await page_two.wait_for_load_state(state='networkidle')
-                # await js_images_time(page_two)
                 await page_two.wait_for_timeout(1000)
                 html = etree.HTML(await page_two.content())
                 # 判断网站是否存在英文数字验证码图片地址
@@ -185,10 +188,10 @@ class Ui(object):
                     await page_two.wait_for_timeout(timeouts)
                     await page_two.close()
                 else:
-                    yzm = yzm[0].replace('..', '').replace("//","/")
-                    img_url = await performjs_code(page_two, yzm)
-                    data = img_url.split(",")[1]
-                    code = self.ocr.classification(base64.b64decode(data))
+                    yzm = yzm[0].replace('..', '').replace("//", "/")
+                    data = yzm.split(",")[1] if yzm.startswith("data:image") else \
+                        (await performjs_code(page_two, yzm)).split(",")[1]
+                    code = self.ocr.classification(decode_base64(data))
                     await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code, loginpath)
                     await page_two.wait_for_timeout(1000)
                     result = (f'title:{await page_two.title()} {page_two.url}'
@@ -202,7 +205,7 @@ class Ui(object):
                     await page_two.wait_for_timeout(timeouts)
                     await page_two.close()
             except Exception as e:
-                logger.debug(e)
+                logger.error(e)
                 self.announcement.append(f"函数执行异常 {e}")
                 self.urls.discard(setlist)
                 self.sd_start_log.append('{}请求失败'.format(setlist))
@@ -408,27 +411,28 @@ class Ui(object):
                     self.zd_start_log.append("暂时没有其他模式")
                     self.sd_start_log.append("暂时没有其他模式")
         else:
+            targets = url if url.startswith(('http://', 'https://')) else ''.join(('http://', url))
             if mode == 'sniper:狙击手':
                 if len(user) == 1 and len(password) >= 2:
                     '''这里用户名 1位 密码 大于1 '''
                     for passwo in password:
-                        self.urls.add((url, user[0], passwo))
+                        self.urls.add((targets, user[0], passwo))
                 elif len(password) == 1 and len(user) >= 2:
                     '''这里用户名 大于1位 密码 ==1 '''
                     for ur in user:
-                        self.urls.add((url, ur, password[0]))
+                        self.urls.add((targets, ur, password[0]))
                 elif len(password) >= 2 and len(user) >= 2:
                     self.zd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
                     self.sd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
             elif mode == "ram:攻城锤":
-                if len(user) == 1 and len(password) == 1:
+                if len(targets) == 1 and len(password) == 1:
                     self.zd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
                     self.sd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     payload = set(user + password)
                     for pay in payload:
-                        self.urls.add((url, pay, pay))
+                        self.urls.add((targets, pay, pay))
             elif mode == "fork:草叉模式":
                 if len(user) <= 1 and len(password) <= 1:
                     self.zd_start_log.append('草叉模式，需要用户名和密码设置2个以上字符串')
@@ -436,7 +440,7 @@ class Ui(object):
                     return
                 else:
                     for name, pay in zip(user, password):
-                        self.urls.add((url, name, pay))
+                        self.urls.add((targets, name, pay))
             elif mode == "bomb:集束炸弹":
                 if len(user) <= 1 and len(password) <= 1:
                     self.zd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
@@ -448,11 +452,11 @@ class Ui(object):
                 else:
                     for name in user:
                         for pay in password:
-                            self.urls.add((url, name, pay))
+                            self.urls.add((targets, name, pay))
         # 暂停，重启按钮
 
     def waitingfor(self):
-        self.log_clear()
+        # self.log_clear()
         taskss = asyncio.all_tasks()
         for key in taskss:
             if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
@@ -521,13 +525,13 @@ class Ui(object):
     def load_button_user(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
-            text = Path(open_file_name[0]).read_text(encoding="utf-8",errors='ignore')
+            text = Path(open_file_name[0]).read_text(encoding="utf-8", errors='ignore')
             self.password_result_text_user.appendPlainText(text)
 
     def load_button_pass(self):
         open_file_name = QFileDialog.getOpenFileName()
         if open_file_name[0].endswith(".txt"):
-            text = Path(open_file_name[0]).read_text(encoding="utf-8",errors='ignore')
+            text = Path(open_file_name[0]).read_text(encoding="utf-8", errors='ignore')
             self.password_result_text_pass.appendPlainText(text)
 
     def get_head(self):

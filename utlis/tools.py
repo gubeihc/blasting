@@ -1,4 +1,6 @@
 # return top 10 用户名
+import base64
+
 
 def returndictionary(name):
     dictionary = {
@@ -47,3 +49,25 @@ def returndictionary(name):
                            100],
     }
     return dictionary[name]
+
+
+def decode_base64(base64_string):
+    # 添加适当数量的填充字符"="
+    padding = len(base64_string) % 4
+    if padding != 0:
+        base64_string += "=" * (4 - padding)
+
+    # 解码Base64字符串
+    try:
+        decoded_data = base64.b64decode(base64_string)
+        return decoded_data
+    except base64.binascii.Error:
+        print("Invalid Base64 string")
+        return None
+
+
+if __name__ == '__main__':
+    base64_string = "SGVsbG8gd29ybGQ="
+    decoded_data = decode_base64(base64_string)
+    if decoded_data:
+        print(decoded_data.decode("utf-8"))
