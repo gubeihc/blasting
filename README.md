@@ -64,6 +64,10 @@ jietu:截图
 
 
 ### 源码使用需要安装浏览器
+
+建议更换一下源
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+
 python3 -m playwright install
 
 ## 演示视频
