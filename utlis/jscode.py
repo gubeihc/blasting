@@ -119,11 +119,16 @@ for (let i = 0; i < forms.length; i++) {
     forms[prevIndex].dispatchEvent( new Event('change', { bubbles: true }));
     forms[prevIndex].dispatchEvent( new Event('input', { bubbles: true }));
 
+
     const nextIndex = i + 1;
     yanzm = '%s'
-    forms[nextIndex].setAttribute("value",yanzm);
-    forms[nextIndex].dispatchEvent( new Event('change', { bubbles: true }));
-    forms[nextIndex].dispatchEvent( new Event('input', { bubbles: true }));
+
+    setTimeout(() => {
+            forms[nextIndex].dispatchEvent(new Event('change', { bubbles: true }));
+            forms[nextIndex].setAttribute("value", yanzm);
+            forms[nextIndex].dispatchEvent(new Event('input', { bubbles: true }));
+        }, 10);
+    
   } else if (forms[i].type === 'checkbox' && !forms[i].checked) {
     forms[i].click();
   } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
@@ -187,10 +192,13 @@ async def jsrequest_code(page_two, namepath, passpath, codepath, user, passwd, c
                  password.setAttribute("value",'%s');
                  password.dispatchEvent( new Event('change', { bubbles: true }));
                  password.dispatchEvent( new Event('input', { bubbles: true }));
-                     
+                
+                   setTimeout(() => {
                 yzm.setAttribute("value",'%s');
                  yzm.dispatchEvent( new Event('change', { bubbles: true }));
                  yzm.dispatchEvent( new Event('input', { bubbles: true }));
+        }, 10);
+               
                      var but = x('%s')
                      but.click()
                                                                                      }''' % (

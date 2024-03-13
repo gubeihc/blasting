@@ -17,7 +17,7 @@ from utlis.strEdit import cdpencode
 from utlis.strEdit import readfile_scan
 from utlis.jscode import httpRaw, performjs, performjs_code, performjs_yzm_code, jsrequest, jsrequest_code, \
     js_images_time
-from utlis.tools import returndictionary
+from utlis.tools import returndictionary, return_code
 from utlis.tools import decode_base64
 
 background_tasks = set()
@@ -126,20 +126,19 @@ class Ui(object):
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
                 yzm = [u for u in img_code_url if
-                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg', '==')) and len(u) > 1]
+                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
                 if len(img_code_url) == 0 or len(yzm) == 0:
+                    logger.success(
+                        f"用户 {user} 使用密码 {passwd} 进行请求")
                     urls = await performjs(page_two_zd, passwd, user)
+
                     await page_two_zd.wait_for_timeout(1000)
                     await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
                 else:
-                    yzm = yzm[0].replace('..', '').replace("//", "/")
-                    data = yzm.split(",")[1] if yzm.startswith("data:image") else \
-                        (await performjs_code(page_two_zd, yzm)).split(",")[1]
-                    code = self.ocr.classification(decode_base64(data))
-                    logger.info(
-                        f"当前请求发现存在验证码 使用用户 {user} 使用密码 {passwd}  验证码 {code} 验证码链接{yzm}")
-
-                    urls = await performjs_yzm_code(page_two_zd, passwd, user, code)
+                    code_str = await return_code(yzm, self.ocr, page_two_zd)
+                    logger.success(
+                        f"当前请求发现存在验证码 用户 {user} 密码 {passwd}  验证码 {code_str} 验证码链接{yzm}")
+                    urls = await performjs_yzm_code(page_two_zd, passwd, user, code_str)
                     await page_two_zd.wait_for_timeout(1000)
                     self.POSTdata['username'] = user
                     self.POSTdata['password'] = passwd
@@ -175,7 +174,7 @@ class Ui(object):
                 # 判断网站是否存在英文数字验证码图片地址
                 img_code_url = html.xpath('//img/@src')
                 yzm = [u for u in img_code_url if
-                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg', '==')) and len(u) > 1]
+                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
                 if len(img_code_url) == 0 or len(yzm) == 0:
                     await jsrequest(page_two, namepath, passpath, user, passwd, loginpath)
                     await page_two.wait_for_timeout(1000)
@@ -188,11 +187,8 @@ class Ui(object):
                     await page_two.wait_for_timeout(timeouts)
                     await page_two.close()
                 else:
-                    yzm = yzm[0].replace('..', '').replace("//", "/")
-                    data = yzm.split(",")[1] if yzm.startswith("data:image") else \
-                        (await performjs_code(page_two, yzm)).split(",")[1]
-                    code = self.ocr.classification(decode_base64(data))
-                    await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code, loginpath)
+                    code_str = await return_code(yzm, self.ocr, page_two)
+                    await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code_str, loginpath)
                     await page_two.wait_for_timeout(1000)
                     result = (f'title:{await page_two.title()} {page_two.url}'
                               f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
@@ -217,14 +213,12 @@ class Ui(object):
     async def alltasks(self):
         allt = asyncio.all_tasks()
         self.zd_start_log.append(str(len(allt)))
-
     # 设置回调函数
     def testnode(self, fut, loop):
         if self.node >= 300:
             self.nodewaitingfor()
             self.reget_start(loop)
             logger.success("node 进程次数大于300，重启node进程{}".format(fut))
-
     async def main(self, loop):
         try:
             async with async_playwright() as asp:

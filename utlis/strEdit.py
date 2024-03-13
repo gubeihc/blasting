@@ -1,8 +1,8 @@
 from PyQt6 import QtWidgets
 import platform
 import json
-import requests
 import websocket
+import requests
 
 
 class MLineEdit(QtWidgets.QLineEdit):
@@ -54,21 +54,24 @@ def execute_cdp(conn: websocket, command: dict):
 
 
 def cdpencode(call, express):
-    conn = websocket_conn()
-    # js = "console.log('hello world')" # 控制台打印 hello world
-    command = {
-        'method': 'Debugger.evaluateOnCallFrame',  # 处理 传进去的 expression
-        'id': int(),  # id需要传一个整型，否则会报错
-        'params': {
-            'callFrameId': call,
-            'expression': express,
-            'objectGroup': 'console',
-            'includeCommandLineAPI': True,
+    try:
+        conn = websocket_conn()
+        # js = "console.log('hello world')" # 控制台打印 hello world
+        command = {
+            'method': 'Debugger.evaluateOnCallFrame',  # 处理 传进去的 expression
+            'id': int(),  # id需要传一个整型，否则会报错
+            'params': {
+                'callFrameId': call,
+                'expression': express,
+                'objectGroup': 'console',
+                'includeCommandLineAPI': True,
+            }
         }
-    }
-    resp = execute_cdp(conn, command)
-    print(resp)
-    return resp["result"]["result"]['value']
+        resp = execute_cdp(conn, command)
+        print(resp)
+        return resp["result"]["result"]['value']
+    except Exception as e:
+        return "error"
 
 
 if __name__ == '__main__':

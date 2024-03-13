@@ -1,6 +1,8 @@
 # return top 10 用户名
 import base64
 
+from utlis.jscode import performjs_code
+
 
 def returndictionary(name):
     dictionary = {
@@ -64,6 +66,21 @@ def decode_base64(base64_string):
     except base64.binascii.Error:
         print("Invalid Base64 string")
         return None
+
+
+async def return_code(imageslist, ocr, page_two_zd):
+    codestr = ''
+    for img in imageslist:
+        yzm = img.replace('..', '').replace("//", "/")
+        data = yzm.split(",")[1] if yzm.startswith("data:image") else \
+            (await performjs_code(page_two_zd, yzm)).split(",")[1]
+        try:
+            code = ocr.classification(decode_base64(data))
+            if len(code) == 4 or (6 > len(code) > 3):
+                codestr = code
+        except Exception as e:
+            pass
+    return codestr if codestr else "error"
 
 
 if __name__ == '__main__':
