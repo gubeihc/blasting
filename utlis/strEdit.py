@@ -40,10 +40,14 @@ def readfile_scan(name):
 
 def websocket_conn():
     # websocket_conn 连接
-    resp = requests.get('http://127.0.0.1:9222/json')
-    assert resp.status_code == 200
-    ws_url = resp.json()[0].get('webSocketDebuggerUrl')
-    return websocket.create_connection(ws_url)
+    try:
+        resp = requests.get('http://127.0.0.1:9222/json')
+        assert resp.status_code == 200
+        ws_url = resp.json()[0].get('webSocketDebuggerUrl')
+        return websocket.create_connection(ws_url)
+    except Exception as e:
+        print(f"链接cdp端口失败，请查看是否开启了调试模式 {e}")
+        return e
 
 
 def execute_cdp(conn: websocket, command: dict):
@@ -71,7 +75,7 @@ def cdpencode(call, express):
         print(resp)
         return resp["result"]["result"]['value']
     except Exception as e:
-        return "error"
+        return e
 
 
 if __name__ == '__main__':

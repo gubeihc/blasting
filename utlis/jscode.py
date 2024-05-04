@@ -130,18 +130,26 @@ for (let i = 0; i < forms.length; i++) {
         }, 10);
     
   } else if (forms[i].type === 'checkbox' && !forms[i].checked) {
-    forms[i].click();
+  setTimeout(() => {
+               forms[i].click();
+        }, 10);
   } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
+      setTimeout(() => {
     urls.push({username, password});
     forms[i].click();
+        }, 10);
   }
 }
-                                 if (urls.length === 0) {
+if (urls.length === 0) {
   const buttonForm = document.getElementsByTagName('button');
   if (buttonForm.length > 0) {
-        urls.push('isok');
+        setTimeout(() => {
+  urls.push('isok');
     buttonForm[0].click();
     console.log('js input 输入没找到button 通过 ');
+        }, 10);
+  }
+      
   }
 }
 return urls;
@@ -198,9 +206,12 @@ async def jsrequest_code(page_two, namepath, passpath, codepath, user, passwd, c
                  yzm.dispatchEvent( new Event('change', { bubbles: true }));
                  yzm.dispatchEvent( new Event('input', { bubbles: true }));
         }, 10);
-               
-                     var but = x('%s')
+           setTimeout(() => {
+                var but = x('%s')
                      but.click()
+        }, 10);
+               
+                     
                                                                                      }''' % (
         namepath, passpath, codepath, user, passwd, code, loginpath))
 

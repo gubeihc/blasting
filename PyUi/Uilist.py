@@ -15,10 +15,9 @@ from functools import partial
 from utlis.strEdit import MLineEdit
 from utlis.strEdit import cdpencode
 from utlis.strEdit import readfile_scan
-from utlis.jscode import httpRaw, performjs, performjs_code, performjs_yzm_code, jsrequest, jsrequest_code, \
+from utlis.jscode import httpRaw, performjs, performjs_yzm_code, jsrequest, jsrequest_code, \
     js_images_time
 from utlis.tools import returndictionary, return_code
-from utlis.tools import decode_base64
 
 background_tasks = set()
 
@@ -51,22 +50,24 @@ class Ui(object):
                 (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
             self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
             self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-            self.zd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-            self.sd_start_log.append(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+            self.print_log(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
+
+    def print_log(self, data):
+        self.zd_start_log.append(data)
+        self.sd_start_log.append(data)
 
     async def on_response(self, response):
         if response.request.method == 'POST':
             try:
                 html = await response.json()
                 if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
-                    logger.debug(f"{self.zd_yzm_text.text()} json")
+                    logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 json")
                     await self.addyzm_list()
-            except Exception as e:
-                logger.debug(f"获取验证码错误值进行匹配 {e}")
+            except Exception:
                 try:
                     if (self.zd_yzm_text.text() in await response.text()
                             or self.sd_yzm_text.text() in await response.text()):
-                        logger.debug(f"{self.zd_yzm_text.text()} html 内容")
+                        logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 html")
                     await self.addyzm_list()
                 except Exception as e:
                     logger.debug(f"获取验证码错误值进行匹配 {e}")
@@ -147,8 +148,8 @@ class Ui(object):
                 logger.error(f"函数执行异常 {e}")
                 self.announcement.append(f"函数执行异常 {e}")
                 self.urls.discard(setlist)
+                self.zd_start_log.append("{} 请求失败".format(setlist))
                 self.zd_start_log.append("队列还剩{}".format(len(self.urls)))
-                self.sd_start_log.append('请求失败{}'.format(setlist))
                 timeouts = int(self.zd_delay_text.text()) * 1000
                 await page_two_zd.wait_for_timeout(timeouts)
                 await page_two_zd.close()
@@ -213,12 +214,14 @@ class Ui(object):
     async def alltasks(self):
         allt = asyncio.all_tasks()
         self.zd_start_log.append(str(len(allt)))
+
     # 设置回调函数
     def testnode(self, fut, loop):
         if self.node >= 300:
             self.nodewaitingfor()
             self.reget_start(loop)
             logger.success("node 进程次数大于300，重启node进程{}".format(fut))
+
     async def main(self, loop):
         try:
             async with async_playwright() as asp:
@@ -399,11 +402,9 @@ class Ui(object):
                         for ur in user:
                             self.urls.add((urls, ur, password[0]))
                     elif len(password) >= 2 and len(user) >= 2:
-                        self.zd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
-                        self.sd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
+                        self.print_log('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
                 else:
-                    self.zd_start_log.append("暂时没有其他模式")
-                    self.sd_start_log.append("暂时没有其他模式")
+                    self.print_log("暂时没有其他模式")
         else:
             targets = url if url.startswith(('http://', 'https://')) else ''.join(('http://', url))
             if mode == 'sniper:狙击手':
@@ -416,12 +417,10 @@ class Ui(object):
                     for ur in user:
                         self.urls.add((targets, ur, password[0]))
                 elif len(password) >= 2 and len(user) >= 2:
-                    self.zd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
-                    self.sd_start_log.append('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
+                    self.print_log('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
             elif mode == "ram:攻城锤":
                 if len(targets) == 1 and len(password) == 1:
-                    self.zd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
-                    self.sd_start_log.append('攻城锤模式，需要用户名和密码设置2个以上字符串')
+                    self.print_log('攻城锤模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     payload = set(user + password)
@@ -429,20 +428,17 @@ class Ui(object):
                         self.urls.add((targets, pay, pay))
             elif mode == "fork:草叉模式":
                 if len(user) <= 1 and len(password) <= 1:
-                    self.zd_start_log.append('草叉模式，需要用户名和密码设置2个以上字符串')
-                    self.sd_start_log.append('草叉模式，需要用户名和密码设置2个以上字符串')
+                    self.print_log('草叉模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     for name, pay in zip(user, password):
                         self.urls.add((targets, name, pay))
             elif mode == "bomb:集束炸弹":
                 if len(user) <= 1 and len(password) <= 1:
-                    self.zd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
-                    self.sd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
+                    self.print_log('集束炸弹模式，需要用户名和密码设置2个以上字符串')
                     return
                 elif len(user) <= 1 or len(password) <= 1:
-                    self.zd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
-                    self.sd_start_log.append('集束炸弹模式，需要用户名和密码设置2个以上字符串')
+                    self.print_log('集束炸弹模式，需要用户名和密码设置2个以上字符串')
                 else:
                     for name in user:
                         for pay in password:
@@ -459,8 +455,7 @@ class Ui(object):
                 continue
             else:
                 key.cancel()
-        self.zd_start_log.append(f"暂停任务剩余{len(self.urls)}")
-        self.sd_start_log.append(f"暂停任务剩余{len(self.urls)}")
+        self.print_log(f"暂停任务剩余{len(self.urls)}")
 
     # 这里是限制node进行重启不清除响应
     def nodewaitingfor(self):
@@ -472,8 +467,7 @@ class Ui(object):
                 continue
             else:
                 key.cancel()
-        self.zd_start_log.append(f"暂停任务剩余{len(self.urls)}")
-        self.sd_start_log.append(f"暂停任务剩余{len(self.urls)}")
+        self.print_log(f"暂停任务剩余{len(self.urls)}")
 
     def export_log(self):
         try:
@@ -481,8 +475,7 @@ class Ui(object):
                 result = self.result_text.toPlainText().split("\n")
                 for log in result:
                     f.write(log + "\n")
-                self.zd_start_log.append("导出成功 保存内容到result.txt 文件夹")
-                self.sd_start_log.append("导出成功 保存内容到result.txt 文件夹")
+                self.print_log("导出成功 保存内容到result.txt 文件夹")
         except Exception as e:
             logger.error(e)
 

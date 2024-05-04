@@ -53,18 +53,17 @@ def returndictionary(name):
     return dictionary[name]
 
 
-def decode_base64(base64_string):
+def decode_base64(base64_string_str):
     # 添加适当数量的填充字符"="
-    padding = len(base64_string) % 4
+    padding = len(base64_string_str) % 4
     if padding != 0:
-        base64_string += "=" * (4 - padding)
+        base64_string_str += "=" * (4 - padding)
 
     # 解码Base64字符串
     try:
-        decoded_data = base64.b64decode(base64_string)
-        return decoded_data
-    except base64.binascii.Error:
-        print("Invalid Base64 string")
+        decoded_data_return = base64.b64decode(base64_string_str)
+        return decoded_data_return
+    except Exception:
         return None
 
 
@@ -78,7 +77,7 @@ async def return_code(imageslist, ocr, page_two_zd):
             code = ocr.classification(decode_base64(data))
             if len(code) == 4 or (6 > len(code) > 3):
                 codestr = code
-        except Exception as e:
+        except Exception:
             pass
     return codestr if codestr else "error"
 
