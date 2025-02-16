@@ -12,12 +12,12 @@ from loguru import logger
 from functools import partial
 
 # 这里是自己写的库
-from utlis.strEdit import MLineEdit
-from utlis.strEdit import cdpencode
-from utlis.strEdit import readfile_scan
-from utlis.jscode import httpRaw, performjs, performjs_yzm_code, jsrequest, jsrequest_code, \
+from utlis.strEdit import DragDropLineEdit
+from utlis.strEdit import evaluate_expression
+from utlis.strEdit import read_url_list
+from utlis.jscode import HTTPRaw, performjs, performjs_yzm_code, jsrequest, jsrequest_code, \
     js_images_time
-from utlis.tools import returndictionary, return_code
+from utlis.tools import get_common_credentials, extract_verification_code
 
 background_tasks = set()
 
@@ -26,209 +26,58 @@ logger.add("error.log", rotation="10 MB", retention="10 days", level="ERROR", en
 
 
 class Ui(object):
-    http = httpRaw()
+    http = HTTPRaw()
 
     def __init__(self):
         super(Ui, self).__init__()
-        self.mode = int()
-        self.url = ''
-        self.urls = set()
-        self.head = True
-        self.yzm_list = []
+        self.blast_mode = int()
+        self.current_url = ''
+        self.url_queue = set()
+        self.headless = True
+        self.captcha_retry_list = []
         self.ocr = DdddOcr(show_ad=False)
-        self.tasks = []
-        self.POSTdata = {
+        self.task_list = []
+        self.credentials = {
             'username': '',
             'password': ''
         }
-        self.CallFrameId = ''
-        # 添加一个node计数器，先默认一个node可以请求300次，如果大于300，暂停重启一下。
-        self.node = 0
+        self.cdp_call_frame_id = ''
+        self.request_count = 0
 
-    async def addyzm_list(self):
-        if self.yzm_list.count(
-                (self.url, self.POSTdata.get("username"), self.POSTdata.get("password"))) < 3:
-            self.urls.add((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-            self.yzm_list.append((self.url, self.POSTdata.get("username"), self.POSTdata.get("password")))
-            self.print_log(f"验证码错误 重新爆破{self.POSTdata} 当前列表还剩{len(self.urls)}")
-
+    # -------- 日志和状态管理函数 --------
     def print_log(self, data):
         self.zd_start_log.append(data)
         self.sd_start_log.append(data)
-
-    async def on_response(self, response):
-        if response.request.method == 'POST':
-            try:
-                html = await response.json()
-                if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
-                    logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 json")
-                    await self.addyzm_list()
-            except Exception:
-                try:
-                    if (self.zd_yzm_text.text() in await response.text()
-                            or self.sd_yzm_text.text() in await response.text()):
-                        logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 html")
-                    await self.addyzm_list()
-                except Exception as e:
-                    logger.debug(f"获取验证码错误值进行匹配 {e}")
 
     def log_clear(self):
         self.zd_start_log.clear()
         self.result_text.clear()
         self.sd_start_log.clear()
-        self.urls.clear()
-        self.tasks.clear()
+        self.url_queue.clear()
+        self.task_list.clear()
         self.announcement.clear()
 
-    async def urls_is_os(self, urls, page_two, setlist, user, passwd):
-        if len(urls) != 0:
-            result = (f'title:{await page_two.title()} {page_two.url}  '
-                      f'长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
-            logger.info(
-                f"title:{await page_two.title()}  {page_two.url} "
-                f"长度:{len(await page_two.content())} 账户 {user} 密码 {passwd} ")
-            self.result_text.append(str(' {}'.format(result)))
-            if self.zd_yzm_text.text() in str(await page_two.content()) or self.sd_yzm_text.text() in str(
-                    await page_two.content()):
-                await self.addyzm_list()
-                await page_two.close()
-                self.node = self.node + 1
-            else:
-                timeouts = int(self.zd_delay_text.text()) * 1000
-                await page_two.wait_for_timeout(timeouts)
-                await page_two.context.clear_cookies()
-                await page_two.close()
-                self.node = self.node + 1
-                self.urls.discard(setlist)
-                self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
-        else:
-            timeouts = int(self.zd_delay_text.text()) * 1000
-            await page_two.wait_for_timeout(timeouts)
-            await page_two.context.clear_cookies()
-            await page_two.close()
-            self.node = self.node + 1
-            self.urls.discard(setlist)
-            self.zd_start_log.append("请求队列还剩{}".format(len(self.urls)))
+    def resultlogapp(self, data):
+        self.result_text.append(data)
 
-    async def get_url_request(self, context, sem, setlist):
-        url = setlist[0]
-        self.url = url
-        user = setlist[1]
-        passwd = setlist[2]
-        async with sem:
-            page_two_zd = await context.new_page()
-            page_two_zd.set_default_timeout(3000 * int(self.zd_delay_text.text()))
-            try:
-                await page_two_zd.goto(url)
-                await page_two_zd.wait_for_load_state(state='networkidle')
-                await js_images_time(page_two_zd)
-                await page_two_zd.wait_for_timeout(1000)
-                html = etree.HTML(await page_two_zd.content())
-                # 判断网站是否存在英文数字验证码图片地址
-                img_code_url = html.xpath('//img/@src')
-                yzm = [u for u in img_code_url if
-                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
-                if len(img_code_url) == 0 or len(yzm) == 0:
-                    logger.success(
-                        f"用户 {user} 使用密码 {passwd} 进行请求")
-                    urls = await performjs(page_two_zd, passwd, user)
+    def export_log(self):
+        try:
+            with open('result.txt', 'a') as f:
+                result = self.result_text.toPlainText().split("\n")
+                for log in result:
+                    f.write(log + "\n")
+                self.print_log("导出成功 保存内容到result.txt 文件夹")
+        except Exception as e:
+            logger.error(e)
 
-                    await page_two_zd.wait_for_timeout(1000)
-                    await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
-                else:
-                    code_str = await return_code(yzm, self.ocr, page_two_zd)
-                    logger.success(
-                        f"当前请求发现存在验证码 用户 {user} 密码 {passwd}  验证码 {code_str} 验证码链接{yzm}")
-                    urls = await performjs_yzm_code(page_two_zd, passwd, user, code_str)
-                    await page_two_zd.wait_for_timeout(1000)
-                    self.POSTdata['username'] = user
-                    self.POSTdata['password'] = passwd
-                    await self.urls_is_os(urls, page_two_zd, setlist, user, passwd)
-            except Exception as e:
-                logger.error(f"函数执行异常 {e}")
-                self.announcement.append(f"函数执行异常 {e}")
-                self.urls.discard(setlist)
-                self.zd_start_log.append("{} 请求失败".format(setlist))
-                self.zd_start_log.append("队列还剩{}".format(len(self.urls)))
-                timeouts = int(self.zd_delay_text.text()) * 1000
-                await page_two_zd.wait_for_timeout(timeouts)
-                await page_two_zd.close()
-
-    async def get_url_request_sd(self, context, sem, setlist):
-        url = setlist[0]
-        self.url = url
-        user = setlist[1]
-        passwd = setlist[2]
-        namepath = self.sd_user_text.text()
-        passpath = self.sd_pass_text.text()
-        loginpath = self.sd_login_text.text()
-        yzmpath = self.sd_yzm_text_path.text()
-        async with sem:
-            page_two = await context.new_page()
-            page_two.set_default_timeout(3000 * int(self.sd_delay_text.text()))
-            try:
-                page_two.on('response', self.on_response)
-                await page_two.goto(url)
-                await page_two.wait_for_load_state(state='networkidle')
-                await page_two.wait_for_timeout(1000)
-                html = etree.HTML(await page_two.content())
-                # 判断网站是否存在英文数字验证码图片地址
-                img_code_url = html.xpath('//img/@src')
-                yzm = [u for u in img_code_url if
-                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
-                if len(img_code_url) == 0 or len(yzm) == 0:
-                    await jsrequest(page_two, namepath, passpath, user, passwd, loginpath)
-                    await page_two.wait_for_timeout(1000)
-                    result = (f'title:{await page_two.title()} {page_two.url}'
-                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
-                    self.result_text.append(str(' {}'.format(result)))
-                    self.urls.discard(setlist)
-                    self.sd_start_log.append("请求队列还剩{}".format(len(self.urls)))
-                    timeouts = int(self.sd_delay_text.text()) * 1000
-                    await page_two.wait_for_timeout(timeouts)
-                    await page_two.close()
-                else:
-                    code_str = await return_code(yzm, self.ocr, page_two)
-                    await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code_str, loginpath)
-                    await page_two.wait_for_timeout(1000)
-                    result = (f'title:{await page_two.title()} {page_two.url}'
-                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
-                    self.result_text.append(str(' {}'.format(result)))
-                    self.urls.discard(setlist)
-                    self.sd_start_log.append("请求队列还剩{}".format(len(self.urls)))
-                    self.POSTdata['username'] = user
-                    self.POSTdata['password'] = passwd
-                    timeouts = int(self.sd_delay_text.text()) * 1000
-                    await page_two.wait_for_timeout(timeouts)
-                    await page_two.close()
-            except Exception as e:
-                logger.error(e)
-                self.announcement.append(f"函数执行异常 {e}")
-                self.urls.discard(setlist)
-                self.sd_start_log.append('{}请求失败'.format(setlist))
-                self.sd_start_log.append("队列剩余{}".format(len(self.urls)))
-                timeouts = int(self.zd_delay_text.text()) * 1000
-                await page_two.wait_for_timeout(timeouts)
-                await page_two.close()
-
-    async def alltasks(self):
-        allt = asyncio.all_tasks()
-        self.zd_start_log.append(str(len(allt)))
-
-    # 设置回调函数
-    def testnode(self, fut, loop):
-        if self.node >= 300:
-            self.nodewaitingfor()
-            self.reget_start(loop)
-            logger.success("node 进程次数大于300，重启node进程{}".format(fut))
-
+    # -------- 主要爆破功能函数 --------
     async def main(self, loop):
         try:
             async with async_playwright() as asp:
                 proxy = self.zd_proxy_text.text() if str(self.zd_proxy_text.text()).startswith(
                     ("http://", "https://")) else None
                 browserlaunchoptiondict = {
-                    "headless": self.head,
+                    "headless": self.headless,
                     "proxy": {
                         "server": proxy,
                     }
@@ -236,43 +85,59 @@ class Ui(object):
                 if len(self.zd_proxy_text.text()) < 1:
                     browserlaunchoptiondict.pop("proxy")
                 # 配置user-agent
-                browse = await asp.chromium.launch(**browserlaunchoptiondict)
+                browse = await asp.firefox.launch(**browserlaunchoptiondict)
                 user_agent = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
                               " (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36")
                 context = await browse.new_context(ignore_https_errors=True, user_agent=user_agent)
                 sem = asyncio.Semaphore(int(self.zd_sem_text.text()))
-                while len(self.urls) > 0:
+                while len(self.url_queue) > 0:
                     try:
-                        for url in self.urls.copy():
+                        for url in self.url_queue.copy():
                             task = asyncio.create_task(self.get_url_request(context, sem, url))
                             task.set_name(url)
                             task.add_done_callback(partial(self.testnode, loop=loop))
-                            self.tasks.append(task)
-                        await asyncio.wait(self.tasks)
+                            self.task_list.append(task)
+                        await asyncio.wait(self.task_list)
                     except Exception as e:
                         logger.error(e)
                 self.zd_start_log.append("爆破程序执行完毕")
                 await browse.close()
         except Exception as e:
-            logger.error(f"main 启动遇到问题咯 {e}")
+            logger.error(f"主程序启动失败: {e}")
 
-    def start_cdp_button(self, loop):
-        try:
-            taskss = asyncio.all_tasks()
-            for key in taskss:
-                if "Ui.main_cdp" not in key.get_name():
-                    key.cancel()
-            start = asyncio.ensure_future(self.main_cdp(), loop=loop)
-            background_tasks.add(start)
-            start.add_done_callback(lambda t: background_tasks.remove(t))
+    async def main_sd(self, loop):
+        async with async_playwright() as asp:
+            proxy = self.sd_proxy_text.text() if str(self.sd_proxy_text.text()).startswith(
+                ("http://", "https://")) else None
+            browserlaunchoptiondict = {
+                "headless": self.headless,
+                "proxy": {
+                    "server": proxy,
+                }
 
-        except Exception as e:
-            logger.error(f"{e} cdp开启错误")
+            }
+            if len(self.sd_proxy_text.text()) < 1:
+                browserlaunchoptiondict.pop("proxy")
+            # 配置user-agent
+            browse = await asp.firefox.launch(**browserlaunchoptiondict)
+            context = await browse.new_context(ignore_https_errors=True)
+            sem = asyncio.Semaphore(int(self.sd_sem_text.text()))
+            while len(self.url_queue) > 0:
+                try:
+                    for url in self.url_queue.copy():
+                        task = asyncio.create_task(self.get_url_request_sd(context, sem, url))
+                        task.set_name(url)
+                        task.add_done_callback(partial(self.testnode, loop=loop))
+                        self.task_list.append(task)
+                    await asyncio.wait(self.task_list)
+                except Exception as e:
+                    logger.error(e)
+            self.sd_start_log.append("爆破程序执行完毕")
 
     async def main_cdp(self):
         try:
             async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch_persistent_context(
+                browser = await playwright.firefox.launch_persistent_context(
                     headless=False,
                     devtools=True,
                     ignore_https_errors=False,
@@ -289,34 +154,186 @@ class Ui(object):
         except Error as e:
             logger.error(str(e))
 
-    def blastingmode_cdp(self, mode: str):
-        code = self.cdp_req_raw_text.toPlainText()
-        username = self.password_result_text_user.toPlainText().split('\n')
-        password = self.password_result_text_pass.toPlainText().split('\n')
+    # -------- URL请求处理函数 --------
+    async def get_url_request(self, context, sem, setlist):
+        url = setlist[0]
+        self.current_url = url
+        user = setlist[1]
+        passwd = setlist[2]
+        async with sem:
+            page_two_zd = await context.new_page()
+            page_two_zd.set_default_timeout(3000 * int(self.zd_delay_text.text()))
+            try:
+                response=await page_two_zd.goto(url)
+                await page_two_zd.wait_for_load_state(state='networkidle')
+                await js_images_time(page_two_zd)
+                await page_two_zd.wait_for_timeout(1000)
+                html = etree.HTML(await page_two_zd.content())
+                # 判断网站是否存在英文数字验证码图片地址
+                img_code_url = html.xpath('//img/@src')
+                yzm = [u for u in img_code_url if
+                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
+                if len(img_code_url) == 0 or len(yzm) == 0:
 
-        username_encode = re.findall("(§.*➺§)", code)
-        password_encode = re.findall("(§➸.*§)", code)
-        targets = []
-        result = []
-        canshu = []
-        if mode == 'sniper:狙击手':
-            if username_encode:
-                logger.success("用户名加密")
-                for key in username:
-                    targets.append(re.sub("(§.*➺§)", key, code))
-            if password_encode:
-                logger.success("密码加密")
-                for key in password:
-                    targets.append(re.sub("(§➸.*§)", key, code))
-                for value in targets:
-                    jscode = re.findall("➸➸(.*)➸➸", value)[0]
-                    encode = cdpencode(self.CallFrameId, jscode)
-                    result.append(re.sub("➸➸(.*)➸➸", encode, value))
-                    logger.info(f"参数 加密之后 {encode} \n {re.sub('➸➸(.*)➸➸', encode, value)}")
-                    canshu.append(jscode)
+                    urls = await performjs(page_two_zd, passwd, user)
 
-            # code标记用来生成字典
-        return result, canshu
+                    await page_two_zd.wait_for_timeout(1000)
+                    await self.urls_is_os(response.status,urls, page_two_zd, setlist, user, passwd)
+                else:
+                    code_str = await extract_verification_code(yzm, self.ocr, page_two_zd)
+
+                    urls = await performjs_yzm_code(page_two_zd, passwd, user, code_str)
+                    await page_two_zd.wait_for_timeout(1000)
+                    self.credentials['username'] = user
+                    self.credentials['password'] = passwd
+                    await self.urls_is_os(response.status,urls, page_two_zd, setlist, user, passwd)
+            except Exception as e:
+                logger.error(f"函数执行异常 {e}")
+                self.announcement.append(f"函数执行异常 {e}")
+                self.url_queue.discard(setlist)
+                self.zd_start_log.append("{} 请求失败".format(setlist))
+                self.zd_start_log.append("队列还剩{}".format(len(self.url_queue)))
+                timeout = int(self.zd_delay_text.text()) * 1000
+                await page_two_zd.wait_for_timeout(timeout)
+                await page_two_zd.close()
+
+    async def get_url_request_sd(self, context, sem, setlist):
+        url = setlist[0]
+        self.current_url = url
+        user = setlist[1]
+        passwd = setlist[2]
+        namepath = self.sd_user_text.text()
+        passpath = self.sd_pass_text.text()
+        loginpath = self.sd_login_text.text()
+        yzmpath = self.sd_yzm_text_path.text()
+        async with sem:
+            page_two = await context.new_page()
+            page_two.set_default_timeout(3000 * int(self.sd_delay_text.text()))
+            try:
+                page_two.on('response', self.on_response)
+                response = await page_two.goto(url)
+                await page_two.wait_for_load_state(state='networkidle')
+                await page_two.wait_for_timeout(1000)
+                html = etree.HTML(await page_two.content())
+                # 判断网站是否存在英文数字验证码图片地址
+                img_code_url = html.xpath('//img/@src')
+                yzm = [u for u in img_code_url if
+                       not u.strip().endswith(('.png', '.gif', '.jpg', '.jpeg', '.ico', '.svg')) and len(u) > 1]
+                if len(img_code_url) == 0 or len(yzm) == 0:
+                    await jsrequest(page_two, namepath, passpath, user, passwd, loginpath)
+                    await page_two.wait_for_timeout(1000)
+                    result = (f'status {response.status} title:{await page_two.title()} {page_two.url}'
+                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
+                    self.result_text.append(str(' {}'.format(result)))
+                    logger.info(result)
+                    self.url_queue.discard(setlist)
+                    self.sd_start_log.append("请求队列还剩{}".format(len(self.url_queue)))
+                    timeout = int(self.sd_delay_text.text()) * 1000
+                    await page_two.wait_for_timeout(timeout)
+                    await page_two.close()
+                else:
+                    code_str = await extract_verification_code(yzm, self.ocr, page_two)
+                    await jsrequest_code(page_two, namepath, passpath, yzmpath, user, passwd, code_str, loginpath)
+                    await page_two.wait_for_timeout(1000)
+                    result = (f'status {response.status} title:{await page_two.title()} {page_two.url}'
+                              f'  长度:{len(await page_two.content())} 账户:{user} 密码 {passwd}')
+                    self.result_text.append(str(' {}'.format(result)))
+                    logger.info(result)
+                    self.url_queue.discard(setlist)
+                    self.sd_start_log.append("请求队列还剩{}".format(len(self.url_queue)))
+                    self.credentials['username'] = user
+                    self.credentials['password'] = passwd
+                    timeout = int(self.sd_delay_text.text()) * 1000
+                    await page_two.wait_for_timeout(timeout)
+                    await page_two.close()
+            except Exception as e:
+                logger.error(e)
+                self.announcement.append(f"函数执行异常 {e}")
+                self.url_queue.discard(setlist)
+                self.sd_start_log.append('{}请求失败'.format(setlist))
+                self.sd_start_log.append("队列剩余{}".format(len(self.url_queue)))
+                timeout = int(self.zd_delay_text.text()) * 1000
+                await page_two.wait_for_timeout(timeout)
+                await page_two.close()
+
+    async def urls_is_os(self, status, urls, page, credentials, username, password):
+        if len(urls) != 0:
+            try:
+                result = (f'状态码:{status} 标题:{await page.title()} {page.url} '
+                         f'长度:{len(await page.content())} '
+                         f'用户名:{username} 密码:{password}')
+
+                logger.info(f"状态码:{status} 标题:{await page.title()} {page.url} "
+                          f"长度:{len(await page.content())} "
+                          f"用户名:{username} 密码:{password}")
+
+                self.result_text.append(str(' {}'.format(result)))
+
+                timeout = int(self.zd_delay_text.text()) * 1000
+                await page.wait_for_timeout(timeout)
+                await page.context.clear_cookies()
+                await page.close()
+                self.request_count += 1
+                self.url_queue.discard(credentials)
+                self.zd_start_log.append(f"请求队列还剩{len(self.url_queue)}")
+            except Exception as e:
+                logger.error(f"获取状态码失败: {e}")
+                result = (f'title:{await page.title()} {page.url}  '
+                          f'长度:{len(await page.content())} '
+                          f'账户:{username} 密码:{password}')
+                self.result_text.append(str(' {}'.format(result)))
+                self.zd_start_log.append("{} 请求失败".format(credentials))
+                self.zd_start_log.append("队列还剩{}".format(len(self.url_queue)))
+                timeout = int(self.zd_delay_text.text()) * 1000
+                await page.wait_for_timeout(timeout)
+                await page.close()
+        else:
+            timeout = int(self.zd_delay_text.text()) * 1000
+            await page.wait_for_timeout(timeout)
+            await page.context.clear_cookies()
+            await page.close()
+            self.request_count += 1
+            self.url_queue.discard(credentials)
+            self.zd_start_log.append("请求队列还剩{}".format(len(self.url_queue)))
+
+    # -------- 验证码处理函数 --------
+    async def add_to_captcha_retry(self):
+        current_creds = (self.current_url,
+                        self.credentials.get("username"),
+                        self.credentials.get("password"))
+
+        if self.captcha_retry_list.count(current_creds) < 3:
+            self.url_queue.add(current_creds)
+            self.captcha_retry_list.append(current_creds)
+            self.print_log(f"验证码错误 重新爆破{self.credentials} 当前列表还剩{len(self.url_queue)}")
+
+    async def on_response(self, response):
+        if response.request.method == 'POST':
+            try:
+                html = await response.json()
+                if self.zd_yzm_text.text() in str(html) or self.sd_yzm_text.text() in str(html):
+                    logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 json")
+                    await self.add_to_captcha_retry()
+            except Exception:
+                try:
+                    if (self.zd_yzm_text.text() in await response.text()
+                            or self.sd_yzm_text.text() in await response.text()):
+                        logger.debug(f"验证码匹配重试关键词 {self.zd_yzm_text.text()} 网站回显类型 html")
+                        await self.add_to_captcha_retry()
+                except Exception as e:
+                    pass
+
+    # -------- CDP相关函数 --------
+    async def on_paused(self, event):
+        call_frame_id = event["callFrames"][0]["callFrameId"]
+        self.cdp_call_frame_id = call_frame_id
+        logger.info(f"CDP断点捕获成功 {self.cdp_call_frame_id}")
+
+    async def add_listener(self, clients, page):
+        # Enable the debugger to listen for pause events.
+        client = await clients.new_cdp_session(page)
+        await client.send('Debugger.enable')
+        client.on("Debugger.paused", lambda event: self.on_paused(event))
 
     def cdp_mark_selected_text_user(self):
         cursor = self.cdp_req_raw_text.textCursor()
@@ -342,65 +359,21 @@ class Ui(object):
         # 替换选中的文本为标记后的文本
         cursor.insertText(marked_text)
 
-    async def on_paused(self, event):
-        call_frame_id = event["callFrames"][0]["callFrameId"]
-        self.CallFrameId = call_frame_id
-        logger.info(f"cdp断点捕获成功  {self.CallFrameId}")
-
-    async def add_listener(self, clients, page):
-        # Enable the debugger to listen for pause events.
-        client = await clients.new_cdp_session(page)
-        await client.send('Debugger.enable')
-        client.on("Debugger.paused", lambda event: self.on_paused(event))
-
-    def resultlogapp(self, data):
-        self.result_text.append(data)
-
-    async def main_sd(self, loop):
-        async with async_playwright() as asp:
-            proxy = self.sd_proxy_text.text() if str(self.sd_proxy_text.text()).startswith(
-                ("http://", "https://")) else None
-            browserlaunchoptiondict = {
-                "headless": self.head,
-                "proxy": {
-                    "server": proxy,
-                }
-
-            }
-            if len(self.sd_proxy_text.text()) < 1:
-                logger.info("当前手动爆破模式并没有设置代理")
-                browserlaunchoptiondict.pop("proxy")
-            # 配置user-agent
-            browse = await asp.chromium.launch(**browserlaunchoptiondict)
-            context = await browse.new_context(ignore_https_errors=True)
-            sem = asyncio.Semaphore(int(self.sd_sem_text.text()))
-            while len(self.urls) > 0:
-                try:
-                    for url in self.urls.copy():
-                        task = asyncio.create_task(self.get_url_request_sd(context, sem, url))
-                        task.set_name(url)
-                        task.add_done_callback(partial(self.testnode, loop=loop))
-                        self.tasks.append(task)
-                    await asyncio.wait(self.tasks)
-                except Exception as e:
-                    logger.error(e)
-            self.sd_start_log.append("爆破程序执行完毕")
-
-    # 这里读取批量文件
+    # -------- 爆破模式处理函数 --------
     def blastingmode(self, mode: str):
         url = self.target_url.text()
         user = self.password_result_text_user.toPlainText().split('\n')
         password = self.password_result_text_pass.toPlainText().split('\n')
         if url.endswith(".txt"):
-            data = readfile_scan(url)
+            data = read_url_list(url)
             for urls in data:
                 if mode == 'sniper:狙击手':
                     if len(user) == 1 and len(password) >= 2:
                         for passwo in password:
-                            self.urls.add((urls, user[0], passwo))
+                            self.url_queue.add((urls, user[0], passwo))
                     elif len(password) == 1 and len(user) >= 2:
                         for ur in user:
-                            self.urls.add((urls, ur, password[0]))
+                            self.url_queue.add((urls, ur, password[0]))
                     elif len(password) >= 2 and len(user) >= 2:
                         self.print_log('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
                 else:
@@ -411,11 +384,11 @@ class Ui(object):
                 if len(user) == 1 and len(password) >= 2:
                     '''这里用户名 1位 密码 大于1 '''
                     for passwo in password:
-                        self.urls.add((targets, user[0], passwo))
+                        self.url_queue.add((targets, user[0], passwo))
                 elif len(password) == 1 and len(user) >= 2:
                     '''这里用户名 大于1位 密码 ==1 '''
                     for ur in user:
-                        self.urls.add((targets, ur, password[0]))
+                        self.url_queue.add((targets, ur, password[0]))
                 elif len(password) >= 2 and len(user) >= 2:
                     self.print_log('狙击手模式，需要用户名设置固定值 密码 设置多个值 或者相反')
             elif mode == "ram:攻城锤":
@@ -425,14 +398,14 @@ class Ui(object):
                 else:
                     payload = set(user + password)
                     for pay in payload:
-                        self.urls.add((targets, pay, pay))
+                        self.url_queue.add((targets, pay, pay))
             elif mode == "fork:草叉模式":
                 if len(user) <= 1 and len(password) <= 1:
                     self.print_log('草叉模式，需要用户名和密码设置2个以上字符串')
                     return
                 else:
                     for name, pay in zip(user, password):
-                        self.urls.add((targets, name, pay))
+                        self.url_queue.add((targets, name, pay))
             elif mode == "bomb:集束炸弹":
                 if len(user) <= 1 and len(password) <= 1:
                     self.print_log('集束炸弹模式，需要用户名和密码设置2个以上字符串')
@@ -442,44 +415,162 @@ class Ui(object):
                 else:
                     for name in user:
                         for pay in password:
-                            self.urls.add((targets, name, pay))
+                            self.url_queue.add((targets, name, pay))
         # 暂停，重启按钮
+
+    def blastingmode_cdp(self, mode: str):
+        code = self.cdp_req_raw_text.toPlainText()
+        username = self.password_result_text_user.toPlainText().split('\n')
+        password = self.password_result_text_pass.toPlainText().split('\n')
+
+        username_encode = re.findall("(§.*➺§)", code)
+        password_encode = re.findall("(§➸.*§)", code)
+        targets = []
+        result = []
+        canshu = []
+        if mode == 'sniper:狙击手':
+            if username_encode:
+                logger.success("检测到用户名加密")
+                for key in username:
+                    targets.append(re.sub("(§.*➺§)", key, code))
+            if password_encode:
+                logger.success("检测到密码加密")
+                for key in password:
+                    targets.append(re.sub("(§➸.*§)", key, code))
+                for value in targets:
+                    jscode = re.findall("➸➸(.*)➸➸", value)[0]
+                    encode = evaluate_expression(self.cdp_call_frame_id, jscode)
+                    result.append(re.sub("➸➸(.*)➸➸", encode, value))
+                    logger.info(f"加密参数: {encode} \n {re.sub('➸➸(.*)➸➸', encode, value)}")
+                    canshu.append(jscode)
+
+            # code标记用来生成字典
+        return result, canshu
+
+    # -------- 任务控制函数 --------
+    def get_start(self, loop):
+        self.log_clear()
+        tasks = asyncio.all_tasks()
+        for key in tasks:
+            key.cancel()
+        if self.tabWidget_mode.currentIndex() == 0:
+            logger.success("启动自动爆破模式")
+            try:
+                mode = self.zd_mode_list.currentText()
+                self.blastingmode(mode)
+                self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.url_queue)))
+                start = asyncio.ensure_future(self.main(loop), loop=loop)
+                background_tasks.add(start)
+                start.add_done_callback(lambda t: background_tasks.remove(t))
+            except Exception as e:
+                logger.error(str(e))
+                self.zd_start_log.append(str(e))
+        elif self.tabWidget_mode.currentIndex() == 1:
+            logger.success("启动手动爆破模式")
+            mode = self.sd_mode_list.currentText()
+            self.blastingmode(mode)
+            self.sd_start_log.append("手动请求模式启动！")
+            try:
+                self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.url_queue)))
+                start = asyncio.ensure_future(self.main_sd(loop), loop=loop)
+                background_tasks.add(start)
+                start.add_done_callback(lambda t: background_tasks.remove(t))
+            except Exception as e:
+                self.sd_start_log.append(str(e))
+        elif self.tabWidget_mode.currentIndex() == 2:
+            logger.success("启动CDP断点爆破模式")
+            mode = self.cdp_mode_list.currentText()
+            datalist, canshu = self.blastingmode_cdp(mode)
+            self.http.update_date.connect(self.resultlogapp)
+            self.http.datalist = datalist
+            self.http.canshu = canshu
+            self.http.proxy = self.cdp_proxy.text()
+            self.http.sem = asyncio.Semaphore(int(self.cdp_sem.text()))
+            try:
+                asyncio.ensure_future(self.http.rundatalist(), loop=loop)
+            except Exception as e:
+                logger.error(f"{e}")
+
+    def reget_start(self, loop):
+        logger.success("开始重启任务，节点进程计数重置为0")
+        self.request_count = 0
+        if self.tabWidget_mode.currentIndex() == 0:
+            try:
+                self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.url_queue)))
+                asyncio.ensure_future(self.main(loop), loop=loop)
+            except Exception as e:
+                logger.error(str(e))
+                self.zd_start_log.append(str(e))
+        elif self.tabWidget_mode.currentIndex() == 1:
+            self.sd_start_log.append("手动请求模式启动！")
+            try:
+                self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.url_queue)))
+                asyncio.ensure_future(self.main_sd(loop), loop=loop)
+            except Exception as e:
+                self.sd_start_log.append(str(e))
+        elif self.tabWidget_mode.currentIndex() == 3:
+            logger.success(f"cdp模式重新启动")
+            try:
+                pass
+            except Exception as e:
+                self.sd_start_log.append(str(e))
 
     def waitingfor(self):
         # self.log_clear()
         taskss = asyncio.all_tasks()
         for key in taskss:
             if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
-                self.urls.add(tuple(eval(key.get_name())))
+                self.url_queue.add(tuple(eval(key.get_name())))
                 key.cancel()
                 continue
             else:
                 key.cancel()
-        self.print_log(f"暂停任务剩余{len(self.urls)}")
+        self.print_log(f"暂停任务剩余{len(self.url_queue)}")
 
-    # 这里是限制node进行重启不清除响应
     def nodewaitingfor(self):
         taskss = asyncio.all_tasks()
         for key in taskss:
             if "Task" not in key.get_name() and 'start_blast' not in key.get_name():
-                self.urls.add(tuple(eval(key.get_name())))
+                self.url_queue.add(tuple(eval(key.get_name())))
                 key.cancel()
                 continue
             else:
                 key.cancel()
-        self.print_log(f"暂停任务剩余{len(self.urls)}")
+        self.print_log(f"暂停任务剩余{len(self.url_queue)}")
 
-    def export_log(self):
+    def testnode(self, fut, loop):
+        if self.request_count >= 300:
+            self.nodewaitingfor()
+            self.reget_start(loop)
+            logger.success("节点进程请求次数大于300，正在重启节点进程 {}".format(fut))
+
+    async def alltasks(self):
+        allt = asyncio.all_tasks()
+        self.zd_start_log.append(str(len(allt)))
+
+    # -------- UI按钮处理函数 --------
+    def start_cdp_button(self, loop):
         try:
-            with open('result.txt', 'a') as f:
-                result = self.result_text.toPlainText().split("\n")
-                for log in result:
-                    f.write(log + "\n")
-                self.print_log("导出成功 保存内容到result.txt 文件夹")
-        except Exception as e:
-            logger.error(e)
+            taskss = asyncio.all_tasks()
+            for key in taskss:
+                if "Ui.main_cdp" not in key.get_name():
+                    key.cancel()
+            start = asyncio.ensure_future(self.main_cdp(), loop=loop)
+            background_tasks.add(start)
+            start.add_done_callback(lambda t: background_tasks.remove(t))
 
-        # 按钮区域
+        except Exception as e:
+            logger.error(f"{e} cdp开启错误")
+
+    def get_head(self):
+        if self.sd_browser_button.text() == 'False' or self.zd_browser_button.text() == "False":
+            self.sd_browser_button.setText('True')
+            self.zd_browser_button.setText("True")
+            self.headless = False
+        elif self.sd_browser_button.text() == 'True' or self.zd_browser_button.text() == "True":
+            self.headless = True
+            self.sd_browser_button.setText('False')
+            self.zd_browser_button.setText("False")
 
     def clear_button_user(self):
         self.password_result_text_user.clear()
@@ -521,40 +612,21 @@ class Ui(object):
             text = Path(open_file_name[0]).read_text(encoding="utf-8", errors='ignore')
             self.password_result_text_pass.appendPlainText(text)
 
-    def get_head(self):
-        if self.sd_browser_button.text() == 'False' or self.zd_browser_button.text() == "False":
-            self.sd_browser_button.setText('True')
-            self.zd_browser_button.setText("True")
-            self.head = False
-        elif self.sd_browser_button.text() == 'True' or self.zd_browser_button.text() == "True":
-            self.head = True
-            self.sd_browser_button.setText('False')
-            self.zd_browser_button.setText("False")
+    def add_buttondictionary_user(self):
+        if self.cdp_mode_list_user.currentText() == "用户字典":
+            return
+        datalist = get_common_credentials(self.cdp_mode_list_user.currentText())
+        for key in datalist:
+            self.password_result_text_user.appendPlainText(str(key))
 
-    def reget_start(self, loop):
-        logger.success("开启任务重启 node 进程次数初始化0")
-        self.node = 0
-        if self.tabWidget_mode.currentIndex() == 0:
-            try:
-                self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main(loop), loop=loop)
-            except Exception as e:
-                logger.error(str(e))
-                self.zd_start_log.append(str(e))
-        elif self.tabWidget_mode.currentIndex() == 1:
-            self.sd_start_log.append("手动请求模式启动！")
-            try:
-                self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                asyncio.ensure_future(self.main_sd(loop), loop=loop)
-            except Exception as e:
-                self.sd_start_log.append(str(e))
-        elif self.tabWidget_mode.currentIndex() == 3:
-            logger.success(f"cdp模式重新启动")
-            try:
-                pass
-            except Exception as e:
-                self.sd_start_log.append(str(e))
+    def add_buttondictionary_pass(self):
+        if self.cdp_mode_listpass.currentText() == "密码字典":
+            return
+        datalist = get_common_credentials(self.cdp_mode_listpass.currentText())
+        for key in datalist:
+            self.password_result_text_pass.appendPlainText(str(key))
 
+    # -------- UI设置函数 --------
     def setupui(self, mainwindow):
         mainwindow.setObjectName("MainWindow")
         mainwindow.setFixedSize(1240, 908)
@@ -771,7 +843,7 @@ class Ui(object):
 
         self.announcement.setReadOnly(True)
         self.announcement.setObjectName("announcement")
-        self.target_url = MLineEdit('', mainwindow)
+        self.target_url = DragDropLineEdit('', mainwindow)
         self.target_url.setGeometry(QtCore.QRect(10, 10, 561, 31))
         #
         self.target_url.setAcceptDrops(True)
@@ -849,7 +921,7 @@ class Ui(object):
 
     def retranslateui(self, mainwindow):
         _translate = QtCore.QCoreApplication.translate
-        mainwindow.setWindowTitle(_translate("window", "BLAST v3.1.2 by CVES实验室"))
+        mainwindow.setWindowTitle(_translate("window", "BLAST v3.1.3 by CVES实验室"))
         self.suspended_button.setText(_translate("MainWindow", "暂停爆破"))
         self.export_button.setText(_translate("MainWindow", "导出数据"))
         self.restart_button.setText(_translate("MainWindow", "重启爆破"))
@@ -934,65 +1006,6 @@ class Ui(object):
         self.cdp_mode_listpass.addItem(_translate("MainWindow", "密码数字_1-100"))
         self.tabWidget_user_passwd.setTabText(self.tabWidget_user_passwd.indexOf(self.tab_pass),
                                               _translate("MainWindow", "密码"))
-
-    # 按钮调用函数
-    def get_start(self, loop):
-        self.log_clear()
-        tasks = asyncio.all_tasks()
-        for key in tasks:
-            key.cancel()
-        if self.tabWidget_mode.currentIndex() == 0:
-            logger.success("启动自动爆破模式 ")
-            try:
-                mode = self.zd_mode_list.currentText()
-                self.blastingmode(mode)
-                self.zd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                start = asyncio.ensure_future(self.main(loop), loop=loop)
-                background_tasks.add(start)
-                start.add_done_callback(lambda t: background_tasks.remove(t))
-            except Exception as e:
-                logger.error(str(e))
-                self.zd_start_log.append(str(e))
-        elif self.tabWidget_mode.currentIndex() == 1:
-            logger.success("启动手动爆破模式 ")
-            mode = self.sd_mode_list.currentText()
-            self.blastingmode(mode)
-            self.sd_start_log.append("手动请求模式启动！")
-            try:
-                self.sd_start_log.append('需要爆破队列 {} 次'.format(len(self.urls)))
-                start = asyncio.ensure_future(self.main_sd(loop), loop=loop)
-                background_tasks.add(start)
-                start.add_done_callback(lambda t: background_tasks.remove(t))
-            except Exception as e:
-                self.sd_start_log.append(str(e))
-        elif self.tabWidget_mode.currentIndex() == 2:
-            logger.success("启动cdp 断点爆破模式")
-            mode = self.cdp_mode_list.currentText()
-            datalist, canshu = self.blastingmode_cdp(mode)
-            self.http.update_date.connect(self.resultlogapp)
-            self.http.datalist = datalist
-            self.http.canshu = canshu
-            self.http.proxy = self.cdp_proxy.text()
-            self.http.sem = asyncio.Semaphore(int(self.cdp_sem.text()))
-            try:
-                asyncio.ensure_future(self.http.rundatalist(), loop=loop)
-            except Exception as e:
-                logger.error(f"{e}")
-
-    # 添加用户名或者密码字典函数
-    def add_buttondictionary_user(self):
-        if self.cdp_mode_list_user.currentText() == "用户字典":
-            return
-        datalist = returndictionary(self.cdp_mode_list_user.currentText())
-        for key in datalist:
-            self.password_result_text_user.appendPlainText(str(key))
-
-    def add_buttondictionary_pass(self):
-        if self.cdp_mode_listpass.currentText() == "密码字典":
-            return
-        datalist = returndictionary(self.cdp_mode_listpass.currentText())
-        for key in datalist:
-            self.password_result_text_pass.appendPlainText(str(key))
 
     def ui_set(self, mainwindow, loop):
         self.setupui(mainwindow)

@@ -1,5 +1,4 @@
 PyQt6
-pyqt6-tools
 requests
 playwright~=1.41.1
 lxml~=5.1.0
@@ -8,3 +7,4 @@ aiohttp~=3.9.3
 websocket~=0.2.1
 qasync~=0.27.1
 pyqtdarktheme
+ddddocr

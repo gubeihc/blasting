@@ -11,8 +11,9 @@ from PyUi.Uilist import settings
 
 class Ui_MainWindow(object):
 
-    def setText_ui(self, windows):
-        self.ui = settings.ui_set(windows, loop)
+    @staticmethod
+    def set_text_ui(windows):
+        settings.ui_set(windows, loop)
 
 
 if __name__ == '__main__':
@@ -24,6 +25,6 @@ if __name__ == '__main__':
     mainwindows = QMainWindow()
     with loop:
         ui = Ui_MainWindow()
-        ui.setText_ui(mainwindows)
+        ui.set_text_ui(mainwindows)
         mainwindows.show()
         loop.run_forever()

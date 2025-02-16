@@ -2,332 +2,416 @@ import json
 import aiohttp
 import asyncio
 import re
+from typing import Optional, Dict, Any, List, Tuple
 from PyQt6.QtCore import pyqtSignal, QObject
 
+# JavaScript 模板常量
+JS_IMAGE_HANDLER = """
+() => {
+    // 处理所有图片
+    const images = document.getElementsByTagName('img');
+    for (let img of images) {
+        img.setAttribute('crossorigin', 'anonymous');
+        img.addEventListener('click', () => console.log('Image clicked!'));
+        img.dispatchEvent(new Event('click'));
+    }
 
-async def js_images_time(page_two):
-    """
-    触发网站img标签下 验证码的点击事件，确保jpg等图片后面跟上 时间戳，并对每一个图片设置跨域防止请求错误。
-    :param page_two: 浏览器界面
-    :return:
-   """
-    return await page_two.evaluate(
-        '''()=>{
-const images = document.getElementsByTagName('img');
-
-for (let i = 0; i < images.length; i++) {
-images[i].setAttribute('crossorigin', 'anonymous')
-
-  images[i].addEventListener('click', function() {
-    console.log('Image clicked!');
-  });
-
-  const clickEvent = new Event('click');
-  images[i].dispatchEvent(clickEvent);
+    // 处理所有 checkbox
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    for (let checkbox of checkboxes) {
+        checkbox.addEventListener('click', () => console.log('Checkbox clicked!'));
+        checkbox.checked = !checkbox.checked; // 切换选中状态
+        checkbox.dispatchEvent(new Event('click'));
+    }
 }
+"""
 
-        }'''
+JS_CANVAS_TEMPLATE = """
+() => {
+    const arrImg = document.images;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    
+    for (const img of arrImg) {
+        if (img.src.includes('%s')) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0, img.width, img.height);
+            const format = img.src.substring(img.src.lastIndexOf(".") + 1).toLowerCase();
+            return canvas.toDataURL("image/" + format);
+        }
+    }
+    return null;
+}
+"""
+
+JS_LOGIN_TEMPLATE = """
+() => {
+    const urls = [];
+    const forms = document.getElementsByTagName('input');
+    
+    for (let i = 0; i < forms.length; i++) {
+        if (forms[i].type === 'password') {
+            // 设置密码
+            forms[i].setAttribute("value", '%s');
+            forms[i].dispatchEvent(new Event('change', { bubbles: true }));
+            forms[i].dispatchEvent(new Event('input', { bubbles: true }));
+
+            // 设置用户名
+            const prevIndex = i - 1;
+            forms[prevIndex].setAttribute("value", '%s');
+            forms[prevIndex].dispatchEvent(new Event('change', { bubbles: true }));
+            forms[prevIndex].dispatchEvent(new Event('input', { bubbles: true }));
+        } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
+            if (forms[i].style.display !== 'none') {
+                forms[i].dispatchEvent(new CustomEvent('input'));
+                forms[i].click();
+                urls.push('isok');
+            }
+        }
+    }
+
+    // 尝试使用 button 提交
+    if (urls.length === 0) {
+        const buttonForm = document.getElementsByTagName('button');
+        if (buttonForm.length > 0) {
+            buttonForm[0].click();
+            urls.push('isok');
+        }
+    }
+
+    return urls;
+}
+"""
+
+JS_LOGIN_WITH_CODE_TEMPLATE = """
+() => {
+// 处理所有 checkbox
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    for (let checkbox of checkboxes) {
+        checkbox.addEventListener('click', () => console.log('Checkbox clicked!'));
+        checkbox.checked = !checkbox.checked; // 切换选中状态
+        checkbox.dispatchEvent(new Event('click'));
+    }
+    const xpath = (path) => {
+        const result = document.evaluate(
+            path, 
+            document, 
+            null, 
+            XPathResult.ANY_TYPE, 
+            null
+        );
+        return result.iterateNext();
+    };
+
+    const dispatchEvents = (element, value) => {
+        element.setAttribute("value", value);
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    // 获取元素
+    const username = xpath('%s');
+    const password = xpath('%s');
+    const yzm = xpath('%s');
+    const submitButton = xpath('%s');
+
+    // 设置用户名和密码
+    dispatchEvents(username, '%s');
+    dispatchEvents(password, '%s');
+
+    // 设置验证码并提交
+    setTimeout(() => {
+        dispatchEvents(yzm, '%s');
+        setTimeout(() => submitButton.click(), 10);
+    }, 10);
+}
+"""
+
+
+
+async def js_images_time(page_two) -> None:
+    """处理页面图片元素，设置跨域属性并触发点击事件"""
+    await page_two.evaluate(JS_IMAGE_HANDLER)
+
+async def performjs_code(page_two: Any, yzm: str) -> Optional[str]:
+    """处理验证码图片并返回 base64 编码"""
+    try:
+        return await page_two.evaluate(JS_CANVAS_TEMPLATE % yzm)
+    except Exception as e:
+        print(f"验证码处理失败: {e}")
+        return None
+
+async def performjs(page_two, passwd: str, user: str) -> List[str]:
+    """
+    执行登录表单填充和提交
+    
+    Args:
+        page_two: 页面对象
+        passwd: 密码
+        user: 用户名
+    
+    Returns:
+        List[str]: 提交状态列表
+    """
+    return await page_two.evaluate(JS_LOGIN_TEMPLATE % (passwd, user))
+
+async def performjs_yzm_code(page_two, passwd, user, code):
+    """
+    执行带验证码的登录表单填充和提交
+    
+    Args:
+        page_two: 页面对象
+        passwd: 密码
+        user: 用户名
+        code: 验证码
+    
+    Returns:
+        Dict: 包含提交状态和详细信息的字典
+    """
+    return await page_two.evaluate('''() => {
+        const result = {
+            status: false,
+            message: '',
+            details: {}
+        };
+
+        const forms = document.getElementsByTagName('input');
+        for (let i = 0; i < forms.length; i++) {
+            if (forms[i].type === 'password') {
+                // 设置密码
+                forms[i].setAttribute("value", '%s');
+                forms[i].dispatchEvent(new Event('change', { bubbles: true }));
+                forms[i].dispatchEvent(new Event('input', { bubbles: true }));
+                
+                // 设置用户名
+                const prevIndex = i - 1;
+                forms[prevIndex].setAttribute("value", '%s');
+                forms[prevIndex].dispatchEvent(new Event('change', { bubbles: true }));
+                forms[prevIndex].dispatchEvent(new Event('input', { bubbles: true }));
+
+                // 设置验证码
+                const nextIndex = i + 1;
+                forms[nextIndex].setAttribute("value", '%s');
+                forms[nextIndex].dispatchEvent(new Event('change', { bubbles: true }));
+                forms[nextIndex].dispatchEvent(new Event('input', { bubbles: true }));
+
+                result.details = {
+                    username: '%s',
+                    hasPassword: true,
+                    hasCode: true
+                };
+            }
+        }
+
+        // 提交表单
+        const submitButton = Array.from(forms).find(form => 
+            ['submit', 'image', 'button'].includes(form.type)
+        );
+        
+        if (submitButton) {
+            submitButton.click();
+            result.status = true;
+            result.message = '表单提交成功';
+        } else {
+            // 尝试使用button标签提交
+            const buttonForm = document.getElementsByTagName('button')[0];
+            if (buttonForm) {
+                buttonForm.click();
+                result.status = true;
+                result.message = '通过button标签提交成功';
+            } else {
+                result.message = '未找到提交按钮';
+            }
+        }
+
+        return result;
+    }''' % (passwd, user, code, user))
+
+
+
+async def jsrequest(
+    page_two: Any,
+    namepath: str,
+    passpath: str,
+    user: str,
+    passwd: str,
+    loginpath: str
+) -> None:
+    """
+    执行基本的登录表单填充和提交
+    
+    Args:
+        page_two: 页面对象
+        namepath: 用户名输入框的XPath
+        passpath: 密码输入框的XPath
+        user: 用户名
+        passwd: 密码
+        loginpath: 提交按钮的XPath
+    """
+    return await page_two.evaluate('''() => {
+    // 处理所有 checkbox
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    for (let checkbox of checkboxes) {
+        checkbox.addEventListener('click', () => console.log('Checkbox clicked!'));
+        checkbox.checked = !checkbox.checked; // 切换选中状态
+        checkbox.dispatchEvent(new Event('click'));
+    }
+        function xpath(path) {
+            const result = document.evaluate(
+                path,
+                document,
+                null,
+                XPathResult.ANY_TYPE,
+                null
+            );
+            return result.iterateNext();
+        }
+
+        const username = xpath('%s');
+        const password = xpath('%s');
+        
+        // 设置用户名
+        username.setAttribute("value", '%s');
+        username.dispatchEvent(new Event('change', { bubbles: true }));
+        username.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // 设置密码
+        password.setAttribute("value", '%s');
+        password.dispatchEvent(new Event('change', { bubbles: true }));
+        password.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // 点击提交按钮
+        const submitButton = xpath('%s');
+        submitButton.click();
+    }''' % (namepath, passpath, user, passwd, loginpath))
+
+
+async def jsrequest_code(
+    page_two,
+    namepath: str,
+    passpath: str,
+    codepath: str,
+    user: str,
+    passwd: str,
+    code: str,
+    loginpath: str
+) -> None:
+    """
+    执行带验证码的登录表单填充和提交
+    
+    Args:
+        page_two: 页面对象
+        namepath: 用户名输入框的XPath
+        passpath: 密码输入框的XPath
+        codepath: 验证码输入框的XPath
+        user: 用户名
+        passwd: 密码
+        code: 验证码
+        loginpath: 提交按钮的XPath
+    """
+    return await page_two.evaluate(
+        JS_LOGIN_WITH_CODE_TEMPLATE % (
+            namepath, passpath, codepath, loginpath,
+            user, passwd, code
+        )
     )
 
 
-async def performjs_code(page_two, yzm):
-    return await page_two.evaluate('''()=>{
-                               
-                               var arrImg = document.images;
-                                 var datatext=''
-                            var canvas = document.createElement("canvas");
-                              var ctx = canvas.getContext("2d");
-                                 for (let i = 0; i < arrImg.length; i++){
-                                 if (arrImg[i].src.includes('%s')) {
-                                 canvas.width = arrImg[i].width;
-                                  canvas.height = arrImg[i].height;
-                                 ctx.drawImage(arrImg[i],0,0,arrImg[i].width, arrImg[i].height);
-                                 datatext = arrImg[i].src.substring(arrImg[i].src.lastIndexOf(".") + 1).toLowerCase()
-                                 var dataURL = canvas.toDataURL("image/" + datatext)
-                                console.log(dataURL)
-                                 }
-                                 }
-                                 return dataURL
-                                 }
-                                 '''
-                                   % yzm)
-
-
-async def performjs(page_two, passwd, user):
-    return await page_two.evaluate('''()=>{
-const urls = [];
-let username = '';
-let password = '';
-const forms = document.getElementsByTagName('input');
-const checkboxes = [];
-
-for (let i = 0; i < forms.length; i++) {
-  if (forms[i].type === 'password') {
-    password = '%s';
-    forms[i].setAttribute("value",password);
-    forms[i].dispatchEvent( new Event('change', { bubbles: true }));
-    forms[i].dispatchEvent( new Event('input', { bubbles: true }));
-
-    const prevIndex = i - 1;
-    username = '%s';
-    forms[prevIndex].setAttribute("value",username);
-    forms[prevIndex].dispatchEvent( new Event('change', { bubbles: true }));
-    forms[prevIndex].dispatchEvent( new Event('input', { bubbles: true }));
-
-  } else if (forms[i].type === 'checkbox') {
-    checkboxes.push(forms[i]);
-  } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
-    forms[i].dispatchEvent(new CustomEvent('input'));
-    if (forms[i].style.display === 'none') {
-      continue;
-    }
-    forms[i].click();
-    urls.push('isok');
-  }
-}
-
-if (urls.length === 0) {
-  const buttonForm = document.getElementsByTagName('button');
-  if (buttonForm.length > 0) {
-      urls.push('isok');
-    buttonForm[0].click();
-    console.log('js input 输入没找到 采用button提交 ');
-  }
-}
-
-return urls;
-                                                        }''' % (passwd, user))
-
-
-async def performjs_yzm_code(page_two, passwd, user, code):
-    return await page_two.evaluate('''()=>{
-const urls = [];
-let username = '';
-let password = '';
-
-const forms = document.getElementsByTagName('input');
-for (let i = 0; i < forms.length; i++) {
-  if (forms[i].type === 'password') {
-    password = '%s';
-    forms[i].setAttribute("value",password);
-    forms[i].dispatchEvent( new Event('change', { bubbles: true }));
-    forms[i].dispatchEvent( new Event('input', { bubbles: true }));
-    // 获取用户名并存储到变量 username 中
-    const prevIndex = i - 1;
-    username = '%s';
-    forms[prevIndex].setAttribute("value",username);
-    forms[prevIndex].dispatchEvent( new Event('change', { bubbles: true }));
-    forms[prevIndex].dispatchEvent( new Event('input', { bubbles: true }));
-
-
-    const nextIndex = i + 1;
-    yanzm = '%s'
-
-    setTimeout(() => {
-            forms[nextIndex].dispatchEvent(new Event('change', { bubbles: true }));
-            forms[nextIndex].setAttribute("value", yanzm);
-            forms[nextIndex].dispatchEvent(new Event('input', { bubbles: true }));
-        }, 10);
-    
-  } else if (forms[i].type === 'checkbox' && !forms[i].checked) {
-  setTimeout(() => {
-               forms[i].click();
-        }, 10);
-  } else if (['submit', 'image', 'button'].includes(forms[i].type)) {
-      setTimeout(() => {
-    urls.push({username, password});
-    forms[i].click();
-        }, 10);
-  }
-}
-if (urls.length === 0) {
-  const buttonForm = document.getElementsByTagName('button');
-  if (buttonForm.length > 0) {
-        setTimeout(() => {
-  urls.push('isok');
-    buttonForm[0].click();
-    console.log('js input 输入没找到button 通过 ');
-        }, 10);
-  }
-      
-  }
-}
-return urls;
-
-                                                                    }''' % (passwd, user, code))
-
-
-async def jsrequest(page_two, namepath, passpath, user, passwd, loginpath):
-    return await page_two.evaluate('''()=>{
-
-    function x(xpath) {
-       var result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
-       return result.iterateNext()
-     };
-
-                 var username = x('%s');
-                 var password = x('%s');
-                 
-                 username.setAttribute("value",'%s');
-                 username.dispatchEvent( new Event('change', { bubbles: true }));
-                 username.dispatchEvent( new Event('input', { bubbles: true }));
-                                  
-                 password.setAttribute("value",'%s');
-                 password.dispatchEvent( new Event('change', { bubbles: true }));
-                 password.dispatchEvent( new Event('input', { bubbles: true }));
-                 var but = x('%s');
-                 but.click();
-                                                                                 }''' % (
-        namepath, passpath, user, passwd, loginpath))
-
-
-async def jsrequest_code(page_two, namepath, passpath, codepath, user, passwd, code, loginpath):
-    return await page_two.evaluate('''()=>{
-
-            function x(xpath) {
-           var result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
-           return result.iterateNext()
-         }
-
-                     var username = x('%s');
-                     var password = x('%s');
-                     var yzm = x('%s');
-                     
-                username.setAttribute("value",'%s');
-                 username.dispatchEvent( new Event('change', { bubbles: true }));
-                 username.dispatchEvent( new Event('input', { bubbles: true }));
-                                  
-                 password.setAttribute("value",'%s');
-                 password.dispatchEvent( new Event('change', { bubbles: true }));
-                 password.dispatchEvent( new Event('input', { bubbles: true }));
-                
-                   setTimeout(() => {
-                yzm.setAttribute("value",'%s');
-                 yzm.dispatchEvent( new Event('change', { bubbles: true }));
-                 yzm.dispatchEvent( new Event('input', { bubbles: true }));
-        }, 10);
-           setTimeout(() => {
-                var but = x('%s')
-                     but.click()
-        }, 10);
-               
-                     
-                                                                                     }''' % (
-        namepath, passpath, codepath, user, passwd, code, loginpath))
-
-
-class httpRaw(QObject):
+class HTTPRaw(QObject):
     update_date = pyqtSignal(str)
-    sem = asyncio.Semaphore(10)
-    proxy = 'http://127.0.0.1:8080'
-    datalist = []
-    canshu = []
+    
+    def __init__(self, max_concurrent: int = 10, proxy: str = 'http://127.0.0.1:8080'):
+        super().__init__()
+        self.sem = asyncio.Semaphore(max_concurrent)
+        self.proxy = proxy
+        self.datalist: List[str] = []
+        self.canshu: List[str] = []
 
-    # noinspection PyUnresolvedReferences
-    async def post_req(self, path, header, datastr, ca):
-        url = header.get("Host").strip()
-        urls = "http://" + url + path
-        async with self.sem:
-            async with aiohttp.ClientSession(headers=header) as session:
-                try:
-                    if "application/json" in header.get("Content-Type"):
-                        print("json")
-                        print(datastr)
-                        async with session.post(urls, ssl=False, json=datastr,
-                                                proxy=self.proxy) as resp:
-                            html = await resp.text()
-                            title = await self.titles(html)
-                            print(resp.status, resp.url, len(html))
-                            self.update_date.emit(
-                                f"status: {resp.status} url: {resp.url} title: {title} len: {len(html)} 参数: {ca}")
-                    else:
-                        async with session.post(urls, ssl=False, data=datastr,
-                                                proxy=self.proxy) as resp:
-                            html = await resp.text()
-                            title = await self.titles(html)
-                            print(resp.status, resp.url, len(html))
-                            # noinspection PyUnresolvedReferences
-                            self.update_date.emit(
-                                f"status: {resp.status} url: {resp.url} title: {title} len: {len(html)} 参数: {ca}")
-
-                        # result
-                except Exception as e:
-                    print(e)
-
-    async def titles(self, html):
-        titles = (
-            "<titlename='school'class=\"i18n\">(.*)</title>",
-            'document.title\s=\s"(.*?)"',
-            'document.title="(.*?)"',
-            '<title>(.*?)</title>',
-            '<titlet="(.*?)"></title>',
-            '<title class="next-head">(.*?)</title>',
-            '<h1 class="l logo">(.*)</h1>',
-        )
+    async def _extract_title(self, html: str) -> Optional[str]:
+        """从HTML中提取标题"""
+        title_patterns = [
+            r"<title name='school' class=\"i18n\">(.*?)</title>",
+            r'document.title\s*=\s*"(.*?)"',
+            r'<title>(.*?)</title>',
+            r'<title t="(.*?)"></title>',
+            r'<title class="next-head">(.*?)</title>',
+            r'<h1 class="l logo">(.*?)</h1>',
+        ]
+        
         html = html.replace(' ', '')
-        for ti in titles:
-            title = re.findall(ti, html, re.S | re.I)
-            if len(title) == 0:
-                continue
-            elif len(title) >= 1:
-                if len(title[0]) >= 1:
-                    data = str(title[0]).replace('\r', '').replace('\n', '').strip()
-                    return data
-                elif len(title) >= 2:
-                    data = str(title[1]).replace('\r', '').replace('\n', '').strip()
-                    return data
+        for pattern in title_patterns:
+            if match := re.search(pattern, html, re.S | re.I):
+                return match.group(1).strip()
+        return None
 
-    def parser_raw(self, raw):
-        mode = raw.split()[0]
-        if mode == "POST" and "Content-Type: application/json" not in raw:
-            path = raw.split()[1]
-            data = raw.split()[-1]
-            pairs = [p for p in raw.split('\n')[1:] if p.strip()]
-            # 遍历每个键值对，将其按冒号分割，然后生成一个新的字典
-            d = {}
-            for p in pairs:
-                # noinspection PyBroadException
-                try:
-                    k, v = p.split(': ')
-                    d[k] = v
-                except Exception as e:
-                    print(e)
-            return path, d, data
-        elif mode == "POST" and "Content-Type: application/json" in raw:
-            data_start_index = raw.index(
-                "\n\n") + 2
-            data = raw[data_start_index:].strip()
-            json_data = json.loads(data)
-            path = raw.split()[1]
-            pairs = [p for p in raw.split('\n')[1:] if p.strip()]
-            # 遍历每个键值对，将其按冒号分割，然后生成一个新的字典
-            d = {}
-            for p in pairs:
-                try:
-                    k, v = p.split(': ')
-                    d[k] = v
-                except Exception as e:
-                    print(e)
-            return path, d, json_data
-        elif mode == "GET":
-            path = raw.split()[1]
-            pairs = [p for p in raw.split('\n')[2:] if p.strip()]
-            # 遍历每个键值对，将其按冒号分割，然后生成一个新的字典
-            d = {}
-            for p in pairs:
-                try:
-                    k, v = p.split(': ')
-                    d[k] = v
-                except Exception as e:
-                    print(e)
-            return path, d
+    async def post_request(self, path: str, headers: Dict[str, str], 
+                          data: Any, context: str) -> None:
+        """发送POST请求并处理响应"""
+        url = f"http://{headers.get('Host', '').strip()}{path}"
+        
+        async with self.sem:
+            try:
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    is_json = "application/json" in headers.get("Content-Type", "")
+                    kwargs = {
+                        'ssl': False,
+                        'proxy': self.proxy,
+                        'json' if is_json else 'data': data
+                    }
+                    
+                    async with session.post(url, **kwargs) as resp:
+                        html = await resp.text()
+                        title = await self._extract_title(html)
+                        
+                        self.update_date.emit(
+                            f"status: {resp.status} url: {resp.url} "
+                            f"title: {title} len: {len(html)} 参数: {context}"
+                        )
+                        
+            except Exception as e:
+                print(f"Request error: {e}")
 
-    async def rundatalist(self):
-        result = []
-        for value, ca in zip(self.datalist, self.canshu):
-            path, headers, data = self.parser_raw(value)
-            result.append(asyncio.create_task(self.post_req(path, headers, data, ca)))
-        await asyncio.wait(result)
+    def parse_raw_request(self, raw: str) -> Tuple[str, Dict[str, str], Any]:
+        """解析原始HTTP请求"""
+        lines = raw.split('\n')
+        method, path, *_ = lines[0].split()
+        
+        # 解析headers
+        headers = {}
+        header_lines = [line.strip() for line in lines[1:] if ': ' in line]
+        for line in header_lines:
+            key, value = line.split(': ', 1)
+            headers[key] = value
+
+        # 处理POST数据
+        if method == "POST":
+            data_start = raw.index("\n\n") + 2
+            data = raw[data_start:].strip()
+            
+            if "application/json" in headers.get("Content-Type", ""):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    print("Invalid JSON data")
+                    
+            return path, headers, data
+            
+        return path, headers, None
+
+    async def run_requests(self) -> None:
+        """批量执行请求"""
+        tasks = []
+        for raw_data, context in zip(self.datalist, self.canshu):
+            try:
+                path, headers, data = self.parse_raw_request(raw_data)
+                task = self.post_request(path, headers, data, context)
+                tasks.append(asyncio.create_task(task))
+            except Exception as e:
+                print(f"Error parsing request: {e}")
+                
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 if __name__ == '__main__':
